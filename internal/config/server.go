@@ -5,6 +5,9 @@ import (
 	authHandler "ProjectGolang/internal/api/auth/handler"
 	authRepository "ProjectGolang/internal/api/auth/repository"
 	authService "ProjectGolang/internal/api/auth/service"
+	blogHandler "ProjectGolang/internal/api/blog/handler"
+	blogRepository "ProjectGolang/internal/api/blog/repository"
+	blogService "ProjectGolang/internal/api/blog/service"
 	budgetHandler "ProjectGolang/internal/api/budget_manager/handler"
 	budgetRepository "ProjectGolang/internal/api/budget_manager/repository"
 	budgetService "ProjectGolang/internal/api/budget_manager/service"
@@ -226,8 +229,13 @@ func (s *Server) RegisterHandler() {
 	dokuServices := sentrapayService.NewSentraPayService(s.log, dokuRepo, dokuClient, authRepo, s.utils)
 	dokuHandlers := sentrapayHandler.New(s.log, s.validator, s.middleware, dokuServices)
 
+	//Blog Domain
+	blogRepo := blogRepository.New(s.db, s.log)
+	blogServices := blogService.NewBlogsService(s.log, blogRepo, s.s3Client, s.utils)
+	blogHandlers := blogHandler.New(s.log, s.validator, s.middleware, blogServices)
+
 	s.setupHealthCheck()
-	s.handlers = append(s.handlers, authHandlers, detectionHandlers, budgetHandlers, dokuHandlers)
+	s.handlers = append(s.handlers, authHandlers, detectionHandlers, budgetHandlers, dokuHandlers, blogHandlers)
 }
 
 func (s *Server) Run() error {

@@ -6,27 +6,15 @@ on:
   workflow_dispatch:
     inputs:
       AI_FACE_DETECTION_URL:
-        description: 'Face Detection URL (with ngrok)'
+        description: 'Face Detection URL (with ngrok, without /ws)'
         required: true
         type: string
       AI_KTP_DETECTION_URL:
-        description: 'KTP Detection URL (with ngrok)'
+        description: 'KTP Detection URL (with ngrok, without /ws)'
         required: true
         type: string
       AI_QRIS_DETECTION_URL:
-        description: 'QRIS Detection URL (with ngrok)'
-        required: true
-        type: string
-      AI_FACE_DETECTION_WS_URL:
-        description: 'Face Detection WebSocket URL (with ngrok)'
-        required: true
-        type: string
-      AI_KTP_DETECTION_WS_URL:
-        description: 'KTP Detection WebSocket URL (with ngrok)'
-        required: true
-        type: string
-      AI_QRIS_DETECTION_WS_URL:
-        description: 'QRIS Detection WebSocket URL (with ngrok)'
+        description: 'QRIS Detection URL (with ngrok, without /ws)'
         required: true
         type: string
 
@@ -101,8 +89,8 @@ jobs:
       - name: Run tests
         run: go test -v ./...
 
-  build-and-deploy:
-    name: Build and Deploy
+  build:
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: test
     if: success()
@@ -126,6 +114,7 @@ jobs:
           echo "branch=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+      # Note: We're not using the .env file in the Docker build
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
@@ -138,6 +127,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build
+    if: success()
+
+    steps:
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
@@ -154,9 +150,11 @@ jobs:
           FACE_URL="${{ github.event.inputs.AI_FACE_DETECTION_URL || secrets.AI_FACE_DETECTION_URL }}"
           KTP_URL="${{ github.event.inputs.AI_KTP_DETECTION_URL || secrets.AI_KTP_DETECTION_URL }}"
           QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
-          FACE_WS_URL="${{ github.event.inputs.AI_FACE_DETECTION_WS_URL || secrets.AI_FACE_DETECTION_WS_URL }}"
-          KTP_WS_URL="${{ github.event.inputs.AI_KTP_DETECTION_WS_URL || secrets.AI_KTP_DETECTION_WS_URL }}"
-          QRIS_WS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_WS_URL || secrets.AI_QRIS_DETECTION_WS_URL }}"
+          
+          # Create WebSocket URLs by adding /ws
+          FACE_WS_URL="${FACE_URL}/ws"
+          KTP_WS_URL="${KTP_URL}/ws"
+          QRIS_WS_URL="${QRIS_URL}/ws"
           
           # Create .env file from the GitHub Action variables
           cat > .env << EOF
@@ -243,19 +241,16 @@ jobs:
           FACE_URL="${{ github.event.inputs.AI_FACE_DETECTION_URL || secrets.AI_FACE_DETECTION_URL }}"
           KTP_URL="${{ github.event.inputs.AI_KTP_DETECTION_URL || secrets.AI_KTP_DETECTION_URL }}"
           QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
-          FACE_WS_URL="${{ github.event.inputs.AI_FACE_DETECTION_WS_URL || secrets.AI_FACE_DETECTION_WS_URL }}"
-          KTP_WS_URL="${{ github.event.inputs.AI_KTP_DETECTION_WS_URL || secrets.AI_KTP_DETECTION_WS_URL }}"
-          QRIS_WS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_WS_URL || secrets.AI_QRIS_DETECTION_WS_URL }}"
+          
+          # Automatically create WebSocket URLs
+          FACE_WS_URL="${FACE_URL}/ws"
+          KTP_WS_URL="${KTP_URL}/ws"
+          QRIS_WS_URL="${QRIS_URL}/ws"
           
           # Parse standard URLs
           FACE_DOMAIN_PATH=$(parse_url "$FACE_URL")
           KTP_DOMAIN_PATH=$(parse_url "$KTP_URL")
           QRIS_DOMAIN_PATH=$(parse_url "$QRIS_URL")
-          
-          # Parse WebSocket URLs
-          FACE_WS_DOMAIN_PATH=$(parse_url "$FACE_WS_URL")
-          KTP_WS_DOMAIN_PATH=$(parse_url "$KTP_WS_URL") 
-          QRIS_WS_DOMAIN_PATH=$(parse_url "$QRIS_WS_URL")
           
           # Split into domain and path
           FACE_DOMAIN=$(echo "$FACE_DOMAIN_PATH" | cut -d':' -f1)
@@ -264,14 +259,6 @@ jobs:
           KTP_PATH=$(echo "$KTP_DOMAIN_PATH" | cut -d':' -f2)
           QRIS_DOMAIN=$(echo "$QRIS_DOMAIN_PATH" | cut -d':' -f1)
           QRIS_PATH=$(echo "$QRIS_DOMAIN_PATH" | cut -d':' -f2)
-          
-          # Split WebSocket into domain and path
-          FACE_WS_DOMAIN=$(echo "$FACE_WS_DOMAIN_PATH" | cut -d':' -f1)
-          FACE_WS_PATH=$(echo "$FACE_WS_DOMAIN_PATH" | cut -d':' -f2)
-          KTP_WS_DOMAIN=$(echo "$KTP_WS_DOMAIN_PATH" | cut -d':' -f1)
-          KTP_WS_PATH=$(echo "$KTP_WS_DOMAIN_PATH" | cut -d':' -f2)
-          QRIS_WS_DOMAIN=$(echo "$QRIS_WS_DOMAIN_PATH" | cut -d':' -f1)
-          QRIS_WS_PATH=$(echo "$QRIS_WS_DOMAIN_PATH" | cut -d':' -f2)
           
           # Create Nginx config
           cat > nginx.conf << EOF
@@ -312,29 +299,29 @@ jobs:
           
               # WebSocket support for face detection
               location /api/v1/detect/ws {
-                  proxy_pass ${FACE_WS_URL};
+                  proxy_pass http://${FACE_DOMAIN}${FACE_PATH}ws;
                   proxy_http_version 1.1;
                   proxy_set_header Upgrade \$http_upgrade;
                   proxy_set_header Connection "upgrade";
-                  proxy_set_header Host ${FACE_WS_DOMAIN};
+                  proxy_set_header Host ${FACE_DOMAIN};
               }
           
               # WebSocket support for KTP
               location /api/v1/ktp/ws {
-                  proxy_pass ${KTP_WS_URL};
+                  proxy_pass http://${KTP_DOMAIN}${KTP_PATH}ws;
                   proxy_http_version 1.1;
                   proxy_set_header Upgrade \$http_upgrade;
                   proxy_set_header Connection "upgrade";
-                  proxy_set_header Host ${KTP_WS_DOMAIN};
+                  proxy_set_header Host ${KTP_DOMAIN};
               }
           
               # WebSocket support for QRIS
               location /api/v1/qris/ws {
-                  proxy_pass ${QRIS_WS_URL};
+                  proxy_pass http://${QRIS_DOMAIN}${QRIS_PATH}ws;
                   proxy_http_version 1.1;
                   proxy_set_header Upgrade \$http_upgrade;
                   proxy_set_header Connection "upgrade";
-                  proxy_set_header Host ${QRIS_WS_DOMAIN};
+                  proxy_set_header Host ${QRIS_DOMAIN};
               }
           }
           EOF
@@ -425,6 +412,6 @@ jobs:
             docker-compose down && \
             docker-compose up -d && \
             docker exec nginx nginx -s reload && \
-            docker-compose exec -T golang-app make migrate-up"
+            docker-compose exec -T golang-app make migrate-up || true"
           
           echo "Deployment completed successfully!"

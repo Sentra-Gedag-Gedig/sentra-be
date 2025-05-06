@@ -23,9 +23,9 @@ RUN apk --no-cache add ca-certificates tzdata
 RUN adduser -D -g '' -h /home/appuser appuser
 WORKDIR /home/appuser
 
-# Copy the binary and .env file with appropriate ownership
+# Copy the binary and .env.example file with appropriate ownership
 COPY --from=builder /app/main .
-COPY --chown=appuser .env .
+COPY --chown=appuser .env.example .env
 
 # Switch to the non-root user
 USER appuser

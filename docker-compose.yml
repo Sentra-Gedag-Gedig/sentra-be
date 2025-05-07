@@ -22,7 +22,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-14Oktober04}
       POSTGRES_DB: ${DB_NAME:-tyokeren}
     ports:
-      - "5433:5432"  # Changed host port to 5433, container port stays 5432
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -32,12 +32,12 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
+  redis-sentra:
     image: redis:alpine
-    container_name: redis
+    container_name: redis-sentra
     command: redis-server --requirepass ${REDIS_PASSWORD:-redispassword}
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -83,9 +83,9 @@ services:
       - DB_USER=${DB_USER:-tyokeren}
       - DB_PASSWORD=${DB_PASSWORD:-14Oktober04}
       - DB_HOST=postgres
-      - DB_PORT=5432  # This stays as 5432 because it connects to the container's internal port
+      - DB_PORT=5432
       - DB_NAME=${DB_NAME:-tyokeren}
-      - REDIS_ADDRESS=redis:6379
+      - REDIS_ADDRESS=redis-sentra:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-redispassword}
       - WEBSOCKET_URL=ws://face-detection-service:8000/api/v1/detect/ws
       - KTP_WEBSOCKET_URL=ws://ktp-service:8000/api/v1/ktp/ws
@@ -95,7 +95,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      redis-sentra:
         condition: service_healthy
       face-detection-service:
         condition: service_started

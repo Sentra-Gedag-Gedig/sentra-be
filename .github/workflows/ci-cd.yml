@@ -151,67 +151,59 @@ jobs:
           QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
 
           # Create WebSocket URLs by adding /ws
-          FACE_WS_URL="wss://$(echo ${FACE_URL} | sed 's|^https\?://||')ws"
-          KTP_WS_URL="wss://$(echo ${KTP_URL} | sed 's|^https\?://||')ws"
-          QRIS_WS_URL="wss://$(echo ${QRIS_URL} | sed 's|^https\?://||')ws"
+          FACE_WS_URL="wss://$(echo ${FACE_URL} | sed 's|^https\?://||')/ws"
+          KTP_WS_URL="wss://$(echo ${KTP_URL} | sed 's|^https\?://||')/ws"
+          QRIS_WS_URL="wss://$(echo ${QRIS_URL} | sed 's|^https\?://||')/ws"
 
-          # Create .env file with a single command (no heredoc or template)
-          echo "# Database Config" > .env
-          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
-          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
-          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
-          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
-          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
-          echo "DB_SSLMODE=${{ secrets.DB_SSLMODE }}" >> .env
-          echo "" >> .env
-          echo "# Environment config" >> .env
-          echo "PRODUCTION=${{ secrets.PRODUCTION }}" >> .env
-          echo "" >> .env
-          echo "# Fiber config" >> .env
-          echo "APP_PORT=${{ secrets.APP_PORT }}" >> .env
-          echo "APP_ADDR=${{ secrets.APP_ADDR }}" >> .env
-          echo "" >> .env
-          echo "JWT_ACCESS_TOKEN_SECRET=${{ secrets.JWT_ACCESS_TOKEN_SECRET }}" >> .env
-          echo "" >> .env
-          echo "# Google OAuth2" >> .env
-          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> .env
-          echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> .env
-          echo "GOOGLE_STATE=${{ secrets.GOOGLE_STATE }}" >> .env
-          echo "" >> .env
-          echo "# Redis" >> .env
-          echo "REDIS_DB=${{ secrets.REDIS_DB }}" >> .env
-          echo "REDIS_ADDRESS=${{ secrets.REDIS_ADDRESS }}" >> .env
-          echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" >> .env
-          echo "" >> .env
-          echo "# SMTP" >> .env
-          echo "SMTP_MAIL=${{ secrets.SMTP_MAIL }}" >> .env
-          echo "SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}" >> .env
-          echo "" >> .env
-          echo "# AI Services URLs" >> .env
-          echo "AI_FACE_DETECTION_URL=${FACE_URL}" >> .env
-          echo "AI_KTP_DETECTION_URL=${KTP_URL}" >> .env
-          echo "AI_QRIS_DETECTION_URL=${QRIS_URL}" >> .env
-          echo "AI_FACE_DETECTION_WS_URL=${FACE_WS_URL}" >> .env
-          echo "AI_KTP_DETECTION_WS_URL=${KTP_WS_URL}" >> .env
-          echo "AI_QRIS_DETECTION_WS_URL=${QRIS_WS_URL}" >> .env
-          echo "" >> .env
-          echo "# Gemini" >> .env
-          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
-          echo "GEMINI_MODEL_NAME=${{ secrets.GEMINI_MODEL_NAME }}" >> .env
-          echo "" >> .env
-          echo "# Doku" >> .env
-          echo "DOKU_CLIENT_ID=${{ secrets.DOKU_CLIENT_ID }}" >> .env
-          echo "DOKU_SECRET_KEY=${{ secrets.DOKU_SECRET_KEY }}" >> .env
-          echo "DOKU_IS_PRODUCTION=${{ secrets.DOKU_IS_PRODUCTION }}" >> .env
-          echo "DOKU_PUBLIC_KEY=${{ secrets.DOKU_PUBLIC_KEY }}" >> .env
-          echo "PASSPHRASE=${{ secrets.PASSPHRASE }}" >> .env
-          echo "" >> .env
-          echo "# AWS S3" >> .env
-          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
-          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
-          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
-          echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
-      
+          # Create .env file as a single string without extra newlines
+          cat > .env << EOF
+          # Database Config
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_SSLMODE=${{ secrets.DB_SSLMODE }}
+          # Environment config
+          PRODUCTION=${{ secrets.PRODUCTION }}
+          # Fiber config
+          APP_PORT=${{ secrets.APP_PORT }}
+          APP_ADDR=${{ secrets.APP_ADDR }}
+          JWT_ACCESS_TOKEN_SECRET=${{ secrets.JWT_ACCESS_TOKEN_SECRET }}
+          # Google OAuth2
+          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_STATE=${{ secrets.GOOGLE_STATE }}
+          # Redis
+          REDIS_DB=${{ secrets.REDIS_DB }}
+          REDIS_ADDRESS=${{ secrets.REDIS_ADDRESS }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          # SMTP
+          SMTP_MAIL=${{ secrets.SMTP_MAIL }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          # AI Services URLs
+          AI_FACE_DETECTION_URL=${FACE_URL}
+          AI_KTP_DETECTION_URL=${KTP_URL}
+          AI_QRIS_DETECTION_URL=${QRIS_URL}
+          AI_FACE_DETECTION_WS_URL=${FACE_WS_URL}
+          AI_KTP_DETECTION_WS_URL=${KTP_WS_URL}
+          AI_QRIS_DETECTION_WS_URL=${QRIS_WS_URL}
+          # Gemini
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL_NAME=${{ secrets.GEMINI_MODEL_NAME }}
+          # Doku
+          DOKU_CLIENT_ID=${{ secrets.DOKU_CLIENT_ID }}
+          DOKU_SECRET_KEY=${{ secrets.DOKU_SECRET_KEY }}
+          DOKU_IS_PRODUCTION=${{ secrets.DOKU_IS_PRODUCTION }}
+          DOKU_PUBLIC_KEY=${{ secrets.DOKU_PUBLIC_KEY }}
+          PASSPHRASE=${{ secrets.PASSPHRASE }}
+          # AWS S3
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
+          EOF
+          
           # Verify .env file was created correctly
           echo "Created .env file with correct formatting"
           cat .env | grep -v PASSWORD | grep -v SECRET | head -5

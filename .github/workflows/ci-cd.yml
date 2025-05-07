@@ -151,9 +151,9 @@ jobs:
           QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
 
           # Create WebSocket URLs by adding /ws
-          FACE_WS_URL="wss://$(echo ${FACE_URL} | sed 's|^https\?://||')/ws"
-          KTP_WS_URL="wss://$(echo ${KTP_URL} | sed 's|^https\?://||')/ws"
-          QRIS_WS_URL="wss://$(echo ${QRIS_URL} | sed 's|^https\?://||')/ws"
+          FACE_WS_URL="wss://$(echo ${FACE_URL} | sed 's|^https\?://||')ws"
+          KTP_WS_URL="wss://$(echo ${KTP_URL} | sed 's|^https\?://||')ws"
+          QRIS_WS_URL="wss://$(echo ${QRIS_URL} | sed 's|^https\?://||')ws"
 
           # Create .env file with a single command (no heredoc or template)
           echo "# Database Config" > .env

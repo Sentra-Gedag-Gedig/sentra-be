@@ -1,39 +1,22 @@
-name: Sentra CI/CD Pipeline
+name: CI/CD Pipeline for Sentra Backend
 
 on:
   push:
-    branches: [main, develop]
-  workflow_dispatch:
-    inputs:
-      AI_FACE_DETECTION_URL:
-        description: 'Face Detection URL (with ngrok, without /ws)'
-        required: true
-        type: string
-      AI_KTP_DETECTION_URL:
-        description: 'KTP Detection URL (with ngrok, without /ws)'
-        required: true
-        type: string
-      AI_QRIS_DETECTION_URL:
-        description: 'QRIS Detection URL (with ngrok, without /ws)'
-        required: true
-        type: string
-
-env:
-  GO_VERSION: '1.24'
-  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-  DOCKER_HUB_REPOSITORY: ${{ secrets.DOCKER_HUB_REPOSITORY || 'sentra-backend' }}
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  test:
-    name: Test
+  build-and-test:
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:14-alpine
         env:
-          POSTGRES_USER: postgres
+          POSTGRES_USER: runner
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: sentra_test
+          POSTGRES_DB: test_db
         ports:
           - 5432:5432
         options: >-
@@ -41,6 +24,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
       redis:
         image: redis:alpine
         ports:
@@ -52,365 +36,157 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.21'
           cache: true
 
       - name: Install dependencies
         run: go mod download
 
-      - name: Create test env file
-        run: |
-          cat > .env << EOF
-          DB_USER=postgres
-          DB_PASSWORD=postgres
-          DB_HOST=localhost
-          DB_PORT=5432
-          DB_NAME=sentra_test
-          DB_SSLMODE=disable
-          PRODUCTION=false
-          APP_PORT=3001
-          APP_ADDR=localhost
-          JWT_ACCESS_TOKEN_SECRET=test_secret_key
-          REDIS_DB=0
-          REDIS_ADDRESS=localhost:6379
-          REDIS_PASSWORD=
-          # Mock URLs for testing
-          AI_FACE_DETECTION_URL=http://localhost:8001/mock
-          AI_KTP_DETECTION_URL=http://localhost:8002/mock
-          AI_QRIS_DETECTION_URL=http://localhost:8003/mock
-          EOF
+      - name: Verify dependencies
+        run: go mod verify
 
-      - name: Run tests
-        run: go test -v ./...
+      - name: Build
+        run: go build -v ./cmd/app/main.go
 
-  build:
-    name: Build and Push Docker Image
-    runs-on: ubuntu-latest
-    needs: test
-    if: success()
-
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v3
+      - name: Test
+        run: go test -v ./... -cover
+        env:
+          DB_USER: runner
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_db
+          DB_SSLMODE: disable
+          REDIS_DB: 0
+          REDIS_ADDRESS: localhost:6379
+          REDIS_PASSWORD: ""
+          JWT_ACCESS_TOKEN_SECRET: test_secret
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Login to Docker Hub
+      - name: Login to DockerHub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
-
-      - name: Extract Git information
-        id: git-info
-        run: |
-          echo "branch=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
-          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
-          push: true
-          tags: |
-            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.DOCKER_HUB_REPOSITORY }}:latest
-            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.git-info.outputs.branch }}
-            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.DOCKER_HUB_REPOSITORY }}:${{ steps.git-info.outputs.sha_short }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/sentra-backend:latest
 
   deploy:
-    name: Deploy to Server
+    needs: build-and-test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: build
-    if: success()
 
     steps:
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - uses: actions/checkout@v3
 
-      - name: Add SSH Known Hosts
+      - name: Generate Nginx config from template
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
-
-      - name: Prepare server directory structure
-        run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "mkdir -p ${{ secrets.DEPLOYMENT_PATH }}/nginx/conf.d ${{ secrets.DEPLOYMENT_PATH }}/nginx/logs"
-
-      - name: Create .env file with proper formatting
-        run: |
-          # Create a properly formatted .env file one line at a time
-          {
-            echo "# Database Config"
-            echo "DB_USER=${{ secrets.DB_USER }}"
-            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
-            echo "DB_HOST=${{ secrets.DB_HOST }}"
-            echo "DB_PORT=${{ secrets.DB_PORT }}"
-            echo "DB_NAME=${{ secrets.DB_NAME }}"
-            echo "DB_SSLMODE=${{ secrets.DB_SSLMODE }}"
-            echo "# Environment config"
-            echo "PRODUCTION=${{ secrets.PRODUCTION }}"
-            echo "# Fiber config"
-            echo "APP_PORT=${{ secrets.APP_PORT }}"
-            echo "APP_ADDR=${{ secrets.APP_ADDR }}"
-            echo "JWT_ACCESS_TOKEN_SECRET=${{ secrets.JWT_ACCESS_TOKEN_SECRET }}"
-            echo "# Google OAuth2"
-            echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"
-            echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}"
-            echo "GOOGLE_STATE=${{ secrets.GOOGLE_STATE }}"
-            echo "# Redis"
-            echo "REDIS_DB=${{ secrets.REDIS_DB }}"
-            echo "REDIS_ADDRESS=${{ secrets.REDIS_ADDRESS }}"
-            echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}"
-            echo "# SMTP"
-            echo "SMTP_MAIL=${{ secrets.SMTP_MAIL }}"
-            echo "SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}"
-          
-            # Determine AI URLs from inputs or secrets
-            FACE_URL="${{ github.event.inputs.AI_FACE_DETECTION_URL || secrets.AI_FACE_DETECTION_URL }}"
-            KTP_URL="${{ github.event.inputs.AI_KTP_DETECTION_URL || secrets.AI_KTP_DETECTION_URL }}"
-            QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
-          
-            # Create WebSocket URLs (using a safer approach to handle trailing slashes)
-            FACE_WS_URL="wss://$(echo ${FACE_URL} | sed 's|^https\?://||' | sed 's|/$||')/ws"
-            KTP_WS_URL="wss://$(echo ${KTP_URL} | sed 's|^https\?://||' | sed 's|/$||')/ws"
-            QRIS_WS_URL="wss://$(echo ${QRIS_URL} | sed 's|^https\?://||' | sed 's|/$||')/ws"
-          
-            echo "# AI Services URLs"
-            echo "AI_FACE_DETECTION_URL=${FACE_URL}"
-            echo "AI_KTP_DETECTION_URL=${KTP_URL}"
-            echo "AI_QRIS_DETECTION_URL=${QRIS_URL}"
-            echo "AI_FACE_DETECTION_WS_URL=${FACE_WS_URL}"
-            echo "AI_KTP_DETECTION_WS_URL=${KTP_WS_URL}"
-            echo "AI_QRIS_DETECTION_WS_URL=${QRIS_WS_URL}"
-            echo "# Gemini"
-            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
-            echo "GEMINI_MODEL_NAME=${{ secrets.GEMINI_MODEL_NAME }}"
-            echo "# Doku"
-            echo "DOKU_CLIENT_ID=${{ secrets.DOKU_CLIENT_ID }}"
-            echo "DOKU_SECRET_KEY=${{ secrets.DOKU_SECRET_KEY }}"
-            echo "DOKU_IS_PRODUCTION=${{ secrets.DOKU_IS_PRODUCTION }}"
-            echo "DOKU_PUBLIC_KEY=${{ secrets.DOKU_PUBLIC_KEY }}"
-            echo "PASSPHRASE=${{ secrets.PASSPHRASE }}"
-            echo "# AWS S3"
-            echo "AWS_REGION=${{ secrets.AWS_REGION }}"
-            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}"
-            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-            echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}"
-          } > .env
-          
-          # Verify .env file was created correctly
-          echo "Created .env file with proper formatting"
-          cat .env | grep -v PASSWORD | grep -v SECRET | head -5
-          
-          # Ensure Unix line endings (LF only)
-          tr -d '\r' < .env > .env.tmp && mv .env.tmp .env
-
-      - name: Create Nginx config file
-        run: |
-          # Function to parse URL and extract domain and path
-          function parse_url() {
-            local url=$1
-            # Remove protocol
-            local domain_path=${url#*://}
-            # Extract domain
-            local domain=${domain_path%%/*}
-            domain=${domain%%:*}
-            # Extract path
-            local path="/"
-            if [[ "$domain_path" == */* ]]; then
-              path="/${domain_path#*/}"
-            fi
-            # Make sure path ends with a slash
-            if [[ "$path" != */ ]]; then
-              path="${path}/"
-            fi
-            echo "$domain:$path"
-          }
-          
-          # Get the URLs from inputs or secrets
-          FACE_URL="${{ github.event.inputs.AI_FACE_DETECTION_URL || secrets.AI_FACE_DETECTION_URL }}"
-          KTP_URL="${{ github.event.inputs.AI_KTP_DETECTION_URL || secrets.AI_KTP_DETECTION_URL }}"
-          QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
-          
-          # Parse URLs to get domains and paths
-          FACE_DOMAIN_PATH=$(parse_url "$FACE_URL")
-          KTP_DOMAIN_PATH=$(parse_url "$KTP_URL")
-          QRIS_DOMAIN_PATH=$(parse_url "$QRIS_URL")
-          
-          # Split into domain and path
-          FACE_DOMAIN=$(echo "$FACE_DOMAIN_PATH" | cut -d':' -f1)
-          FACE_PATH=$(echo "$FACE_DOMAIN_PATH" | cut -d':' -f2)
-          KTP_DOMAIN=$(echo "$KTP_DOMAIN_PATH" | cut -d':' -f1)
-          KTP_PATH=$(echo "$KTP_DOMAIN_PATH" | cut -d':' -f2)
-          QRIS_DOMAIN=$(echo "$QRIS_DOMAIN_PATH" | cut -d':' -f1)
-          QRIS_PATH=$(echo "$QRIS_DOMAIN_PATH" | cut -d':' -f2)
-          
-          # Create Nginx config
-          cat > nginx.conf << EOF
-          server {
-              listen 80;
-          
-              # Golang app
-              location / {
-                  proxy_pass http://golang-app:8080;
-                  proxy_set_header Host \$host;
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-              }
-          
-              # Face detection API
-              location /api/v1/detect/ {
-                  proxy_pass http://${FACE_DOMAIN}${FACE_PATH};
-                  proxy_set_header Host ${FACE_DOMAIN};
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-              }
-          
-              # KTP API
-              location /api/v1/ktp/ {
-                  proxy_pass http://${KTP_DOMAIN}${KTP_PATH};
-                  proxy_set_header Host ${KTP_DOMAIN};
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-              }
-          
-              # QRIS API
-              location /api/v1/qris/ {
-                  proxy_pass http://${QRIS_DOMAIN}${QRIS_PATH};
-                  proxy_set_header Host ${QRIS_DOMAIN};
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-              }
-          
-              # WebSocket support for face detection
-              location /api/v1/detect/ws {
-                  proxy_pass http://${FACE_DOMAIN}${FACE_PATH}ws;
-                  proxy_http_version 1.1;
-                  proxy_set_header Upgrade \$http_upgrade;
-                  proxy_set_header Connection "upgrade";
-                  proxy_set_header Host ${FACE_DOMAIN};
-              }
-          
-              # WebSocket support for KTP
-              location /api/v1/ktp/ws {
-                  proxy_pass http://${KTP_DOMAIN}${KTP_PATH}ws;
-                  proxy_http_version 1.1;
-                  proxy_set_header Upgrade \$http_upgrade;
-                  proxy_set_header Connection "upgrade";
-                  proxy_set_header Host ${KTP_DOMAIN};
-              }
-          
-              # WebSocket support for QRIS
-              location /api/v1/qris/ws {
-                  proxy_pass http://${QRIS_DOMAIN}${QRIS_PATH}ws;
-                  proxy_http_version 1.1;
-                  proxy_set_header Upgrade \$http_upgrade;
-                  proxy_set_header Connection "upgrade";
-                  proxy_set_header Host ${QRIS_DOMAIN};
-              }
-          }
-          EOF
-
-      - name: Create/Update docker-compose.yml on server
+          export DOLLAR='$'
+          envsubst < nginx/conf.d/default.conf.template > nginx/conf.d/nginx.conf
         env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          DEPLOYMENT_PATH: ${{ secrets.DEPLOYMENT_PATH }}
-          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-          DOCKER_HUB_REPOSITORY: ${{ env.DOCKER_HUB_REPOSITORY }}
+          AI_FACE_DETECTION_URL: ${{ secrets.AI_FACE_DETECTION_URL }}
+          AI_KTP_DETECTION_URL: ${{ secrets.AI_KTP_DETECTION_URL }}
+          AI_QRIS_DETECTION_URL: ${{ secrets.AI_QRIS_DETECTION_URL }}
+          AI_FACE_DETECTION_WS_URL: ${{ secrets.AI_FACE_DETECTION_WS_URL }}
+          AI_KTP_DETECTION_WS_URL: ${{ secrets.AI_KTP_DETECTION_WS_URL }}
+          AI_QRIS_DETECTION_WS_URL: ${{ secrets.AI_QRIS_DETECTION_WS_URL }}
+
+      - name: Copy Nginx config
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "nginx/conf.d/nginx.conf"
+          target: "/path/to/project/nginx/conf.d/"
+
+      - name: Create .env file
         run: |
-          # Create a docker-compose.yml file that uses the Docker Hub image
-          cat > docker-compose.yml << EOF
-          services:
-            nginx:
-              image: nginx:alpine
-              container_name: nginx
-              # Command to create the /run directory before starting nginx
-              command: sh -c "mkdir -p /run && nginx -g 'daemon off;'"
-              ports:
-                - "80:80"
-              volumes:
-                - ./nginx/conf.d:/etc/nginx/conf.d
-                - ./nginx/logs:/var/log/nginx
-              depends_on:
-                - golang-app
-              restart: unless-stopped
+          cat > .env <<EOL
+          # Database Config
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_SSLMODE=${{ secrets.DB_SSLMODE }}
           
-            postgres:
-              image: postgres:14-alpine
-              container_name: postgres
-              environment:
-                POSTGRES_USER: \${DB_USER}
-                POSTGRES_PASSWORD: \${DB_PASSWORD}
-                POSTGRES_DB: \${DB_NAME}
-              ports:
-                - "5433:5432"  
-              volumes:
-                - postgres_data:/var/lib/postgresql/data
-              restart: unless-stopped
-              healthcheck:
-                test: [ "CMD-SHELL", "pg_isready -U \${DB_USER}" ]
-                interval: 10s
-                timeout: 5s
-                retries: 5
+          # Environment config
+          PRODUCTION=true
+          APP_PORT=${{ secrets.APP_PORT }}
+          APP_ADDR=${{ secrets.APP_ADDR }}
           
-            redis-sentra: 
-              image: redis:alpine
-              container_name: redis-sentra  
-              command: redis-server --requirepass \${REDIS_PASSWORD}
-              ports:
-                - "6380:6379"  
-              volumes:
-                - redis_data:/data
-              restart: unless-stopped
-              healthcheck:
-                test: [ "CMD", "redis-cli", "ping" ]
-                interval: 10s
-                timeout: 5s
-                retries: 5
+          JWT_ACCESS_TOKEN_SECRET=${{ secrets.JWT_ACCESS_TOKEN_SECRET }}
           
-            golang-app:
-              image: ${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPOSITORY}:latest
-              container_name: golang-app
-              env_file: .env
-              environment:
-                - DB_HOST=postgres
-                - DB_PORT=5432
-                - REDIS_ADDRESS=redis-sentra:6379
-              depends_on:
-                postgres:
-                  condition: service_healthy
-                redis-sentra: 
-                  condition: service_healthy
-              restart: unless-stopped
+          # Google OAuth2
+          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_STATE=${{ secrets.GOOGLE_STATE }}
           
-          volumes:
-            postgres_data:
-            redis_data:
-          EOF
+          # Redis
+          REDIS_DB=${{ secrets.REDIS_DB }}
+          REDIS_ADDRESS=${{ secrets.REDIS_ADDRESS }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
           
-          # Transfer files to server
-          scp .env $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/
-          scp nginx.conf $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/nginx/conf.d/default.conf
-          scp docker-compose.yml $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/
+          # SMTP
+          SMTP_MAIL=${{ secrets.SMTP_MAIL }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
           
-          # Deploy application
-          ssh $SERVER_USER@$SERVER_IP "cd $DEPLOYMENT_PATH && \
-            docker-compose pull && \
-            docker-compose down && \
-            docker-compose up -d && \
-            docker exec nginx nginx -s reload && \
-            docker-compose exec -T golang-app make migrate-up || true"
+          # AI Services URLs
+          AI_FACE_DETECTION_URL=${{ secrets.AI_FACE_DETECTION_URL }}
+          AI_KTP_DETECTION_URL=${{ secrets.AI_KTP_DETECTION_URL }}
+          AI_QRIS_DETECTION_URL=${{ secrets.AI_QRIS_DETECTION_URL }}
+          AI_FACE_DETECTION_WS_URL=${{ secrets.AI_FACE_DETECTION_WS_URL }}
+          AI_KTP_DETECTION_WS_URL=${{ secrets.AI_KTP_DETECTION_WS_URL }}
+          AI_QRIS_DETECTION_WS_URL=${{ secrets.AI_QRIS_DETECTION_WS_URL }}
           
-          echo "Deployment completed successfully!"
+          # Gemini
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL_NAME=${{ secrets.GEMINI_MODEL_NAME }}
+          
+          # Doku
+          DOKU_CLIENT_ID=${{ secrets.DOKU_CLIENT_ID }}
+          DOKU_SECRET_KEY=${{ secrets.DOKU_SECRET_KEY }}
+          DOKU_IS_PRODUCTION=${{ secrets.DOKU_IS_PRODUCTION }}
+          DOKU_PUBLIC_KEY=${{ secrets.DOKU_PUBLIC_KEY }}
+          PASSPHRASE=${{ secrets.PASSPHRASE }}
+          
+          # AWS S3
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
+          EOL
+
+      - name: Copy .env file
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: ".env"
+          target: "/path/to/project/"
+
+      - name: Deploy to Biznet server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /path/to/project
+            docker-compose pull
+            docker-compose down
+            docker-compose up -d

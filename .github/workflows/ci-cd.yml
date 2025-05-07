@@ -149,313 +149,274 @@ jobs:
           FACE_URL="${{ github.event.inputs.AI_FACE_DETECTION_URL || secrets.AI_FACE_DETECTION_URL }}"
           KTP_URL="${{ github.event.inputs.AI_KTP_DETECTION_URL || secrets.AI_KTP_DETECTION_URL }}"
           QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
-          
+
           # Create WebSocket URLs by adding /ws
           FACE_WS_URL="wss://$(echo ${FACE_URL} | sed 's|^https\?://||')/ws"
           KTP_WS_URL="wss://$(echo ${KTP_URL} | sed 's|^https\?://||')/ws"
           QRIS_WS_URL="wss://$(echo ${QRIS_URL} | sed 's|^https\?://||')/ws"
+
+          # Create .env file with a single command (no heredoc or template)
+          echo "# Database Config" > .env
+          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "DB_SSLMODE=${{ secrets.DB_SSLMODE }}" >> .env
+          echo "" >> .env
+          echo "# Environment config" >> .env
+          echo "PRODUCTION=${{ secrets.PRODUCTION }}" >> .env
+          echo "" >> .env
+          echo "# Fiber config" >> .env
+          echo "APP_PORT=${{ secrets.APP_PORT }}" >> .env
+          echo "APP_ADDR=${{ secrets.APP_ADDR }}" >> .env
+          echo "" >> .env
+          echo "JWT_ACCESS_TOKEN_SECRET=${{ secrets.JWT_ACCESS_TOKEN_SECRET }}" >> .env
+          echo "" >> .env
+          echo "# Google OAuth2" >> .env
+          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> .env
+          echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> .env
+          echo "GOOGLE_STATE=${{ secrets.GOOGLE_STATE }}" >> .env
+          echo "" >> .env
+          echo "# Redis" >> .env
+          echo "REDIS_DB=${{ secrets.REDIS_DB }}" >> .env
+          echo "REDIS_ADDRESS=${{ secrets.REDIS_ADDRESS }}" >> .env
+          echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" >> .env
+          echo "" >> .env
+          echo "# SMTP" >> .env
+          echo "SMTP_MAIL=${{ secrets.SMTP_MAIL }}" >> .env
+          echo "SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}" >> .env
+          echo "" >> .env
+          echo "# AI Services URLs" >> .env
+          echo "AI_FACE_DETECTION_URL=${FACE_URL}" >> .env
+          echo "AI_KTP_DETECTION_URL=${KTP_URL}" >> .env
+          echo "AI_QRIS_DETECTION_URL=${QRIS_URL}" >> .env
+          echo "AI_FACE_DETECTION_WS_URL=${FACE_WS_URL}" >> .env
+          echo "AI_KTP_DETECTION_WS_URL=${KTP_WS_URL}" >> .env
+          echo "AI_QRIS_DETECTION_WS_URL=${QRIS_WS_URL}" >> .env
+          echo "" >> .env
+          echo "# Gemini" >> .env
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+          echo "GEMINI_MODEL_NAME=${{ secrets.GEMINI_MODEL_NAME }}" >> .env
+          echo "" >> .env
+          echo "# Doku" >> .env
+          echo "DOKU_CLIENT_ID=${{ secrets.DOKU_CLIENT_ID }}" >> .env
+          echo "DOKU_SECRET_KEY=${{ secrets.DOKU_SECRET_KEY }}" >> .env
+          echo "DOKU_IS_PRODUCTION=${{ secrets.DOKU_IS_PRODUCTION }}" >> .env
+          echo "DOKU_PUBLIC_KEY=${{ secrets.DOKU_PUBLIC_KEY }}" >> .env
+          echo "PASSPHRASE=${{ secrets.PASSPHRASE }}" >> .env
+          echo "" >> .env
+          echo "# AWS S3" >> .env
+          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
+      
+          # Verify .env file was created correctly
+          echo "Created .env file with correct formatting"
+          cat .env | grep -v PASSWORD | grep -v SECRET | head -5
+
+      - name: Create Nginx config file
+        run: |
+          # Function to parse URL and extract domain and path
+          function parse_url() {
+            local url=$1
+            # Remove protocol
+            local domain_path=${url#*://}
+            # Extract domain
+            local domain=${domain_path%%/*}
+            domain=${domain%%:*}
+            # Extract path
+            local path="/"
+            if [[ "$domain_path" == */* ]]; then
+              path="/${domain_path#*/}"
+            fi
+            # Make sure path ends with a slash
+            if [[ "$path" != */ ]]; then
+              path="${path}/"
+            fi
+            echo "$domain:$path"
+          }
           
-          # Create .env file with a simple heredoc to avoid variable expansion issues
-          cat > .env << 'ENVEOF'
-          # Database Config
-            DB_USER=DBUSER_PLACEHOLDER
-            DB_PASSWORD=DBPASS_PLACEHOLDER
-            DB_HOST=DBHOST_PLACEHOLDER
-            DB_PORT=DBPORT_PLACEHOLDER
-            DB_NAME=DBNAME_PLACEHOLDER
-            DB_SSLMODE=DBSSL_PLACEHOLDER
-            
-            # Environment config
-            PRODUCTION=PROD_PLACEHOLDER
-            
-            # Fiber config
-            APP_PORT=APPPORT_PLACEHOLDER
-            APP_ADDR=APPADDR_PLACEHOLDER
-            
-            JWT_ACCESS_TOKEN_SECRET=JWT_PLACEHOLDER
-            
-            # Google OAuth2
-            GOOGLE_CLIENT_ID=GCLIENT_PLACEHOLDER
-            GOOGLE_CLIENT_SECRET=GSECRET_PLACEHOLDER
-            GOOGLE_STATE=GSTATE_PLACEHOLDER
-            
-            # Redis
-            REDIS_DB=REDISDB_PLACEHOLDER
-            REDIS_ADDRESS=REDISADDR_PLACEHOLDER
-            REDIS_PASSWORD=REDISPASS_PLACEHOLDER
-            
-            # SMTP
-            SMTP_MAIL=SMTPMAIL_PLACEHOLDER
-            SMTP_PASSWORD=SMTPPASS_PLACEHOLDER
-            
-            # AI Services URLs
-            AI_FACE_DETECTION_URL=FACEURL_PLACEHOLDER
-            AI_KTP_DETECTION_URL=KTPURL_PLACEHOLDER
-            AI_QRIS_DETECTION_URL=QRISURL_PLACEHOLDER
-            AI_FACE_DETECTION_WS_URL=FACEWS_PLACEHOLDER
-            AI_KTP_DETECTION_WS_URL=KTPWS_PLACEHOLDER
-            AI_QRIS_DETECTION_WS_URL=QRISWS_PLACEHOLDER
-            
-            # Gemini
-            GEMINI_API_KEY=GEMINIKEY_PLACEHOLDER
-            GEMINI_MODEL_NAME=GEMINIMODEL_PLACEHOLDER
-            
-            # Doku
-            DOKU_CLIENT_ID=DOKUCLIENT_PLACEHOLDER
-            DOKU_SECRET_KEY=DOKUSECRET_PLACEHOLDER
-            DOKU_IS_PRODUCTION=DOKUISPROD_PLACEHOLDER
-            DOKU_PUBLIC_KEY=DOKUPUBKEY_PLACEHOLDER
-            PASSPHRASE=PASSPHRASE_PLACEHOLDER
-            
-            # AWS S3
-            AWS_REGION=AWSREGION_PLACEHOLDER
-            AWS_ACCESS_KEY_ID=AWSKEY_PLACEHOLDER
-            AWS_SECRET_ACCESS_KEY=AWSSECRET_PLACEHOLDER
-            AWS_BUCKET_NAME=AWSBUCKET_PLACEHOLDER
-            ENVEOF
-            
-            # Replace placeholders with actual values
-            sed -i "s|DBUSER_PLACEHOLDER|${{ secrets.DB_USER }}|g" .env
-            sed -i "s|DBPASS_PLACEHOLDER|${{ secrets.DB_PASSWORD }}|g" .env
-            sed -i "s|DBHOST_PLACEHOLDER|${{ secrets.DB_HOST }}|g" .env
-            sed -i "s|DBPORT_PLACEHOLDER|${{ secrets.DB_PORT }}|g" .env
-            sed -i "s|DBNAME_PLACEHOLDER|${{ secrets.DB_NAME }}|g" .env
-            sed -i "s|DBSSL_PLACEHOLDER|${{ secrets.DB_SSLMODE }}|g" .env
-            sed -i "s|PROD_PLACEHOLDER|${{ secrets.PRODUCTION }}|g" .env
-            sed -i "s|APPPORT_PLACEHOLDER|${{ secrets.APP_PORT }}|g" .env
-            sed -i "s|APPADDR_PLACEHOLDER|${{ secrets.APP_ADDR }}|g" .env
-            sed -i "s|JWT_PLACEHOLDER|${{ secrets.JWT_ACCESS_TOKEN_SECRET }}|g" .env
-            sed -i "s|GCLIENT_PLACEHOLDER|${{ secrets.GOOGLE_CLIENT_ID }}|g" .env
-            sed -i "s|GSECRET_PLACEHOLDER|${{ secrets.GOOGLE_CLIENT_SECRET }}|g" .env
-            sed -i "s|GSTATE_PLACEHOLDER|${{ secrets.GOOGLE_STATE }}|g" .env
-            sed -i "s|REDISDB_PLACEHOLDER|${{ secrets.REDIS_DB }}|g" .env
-            sed -i "s|REDISADDR_PLACEHOLDER|${{ secrets.REDIS_ADDRESS }}|g" .env
-            sed -i "s|REDISPASS_PLACEHOLDER|${{ secrets.REDIS_PASSWORD }}|g" .env
-            sed -i "s|SMTPMAIL_PLACEHOLDER|${{ secrets.SMTP_MAIL }}|g" .env
-            sed -i "s|SMTPPASS_PLACEHOLDER|${{ secrets.SMTP_PASSWORD }}|g" .env
-            sed -i "s|FACEURL_PLACEHOLDER|${FACE_URL}|g" .env
-            sed -i "s|KTPURL_PLACEHOLDER|${KTP_URL}|g" .env
-            sed -i "s|QRISURL_PLACEHOLDER|${QRIS_URL}|g" .env
-            sed -i "s|FACEWS_PLACEHOLDER|${FACE_WS_URL}|g" .env
-            sed -i "s|KTPWS_PLACEHOLDER|${KTP_WS_URL}|g" .env
-            sed -i "s|QRISWS_PLACEHOLDER|${QRIS_WS_URL}|g" .env
-            sed -i "s|GEMINIKEY_PLACEHOLDER|${{ secrets.GEMINI_API_KEY }}|g" .env
-            sed -i "s|GEMINIMODEL_PLACEHOLDER|${{ secrets.GEMINI_MODEL_NAME }}|g" .env
-            sed -i "s|DOKUCLIENT_PLACEHOLDER|${{ secrets.DOKU_CLIENT_ID }}|g" .env
-            sed -i "s|DOKUSECRET_PLACEHOLDER|${{ secrets.DOKU_SECRET_KEY }}|g" .env
-            sed -i "s|DOKUISPROD_PLACEHOLDER|${{ secrets.DOKU_IS_PRODUCTION }}|g" .env
-            sed -i "s|DOKUPUBKEY_PLACEHOLDER|${{ secrets.DOKU_PUBLIC_KEY }}|g" .env
-            sed -i "s|PASSPHRASE_PLACEHOLDER|${{ secrets.PASSPHRASE }}|g" .env
-            sed -i "s|AWSREGION_PLACEHOLDER|${{ secrets.AWS_REGION }}|g" .env
-            sed -i "s|AWSKEY_PLACEHOLDER|${{ secrets.AWS_ACCESS_KEY_ID }}|g" .env
-            sed -i "s|AWSSECRET_PLACEHOLDER|${{ secrets.AWS_SECRET_ACCESS_KEY }}|g" .env
-            sed -i "s|AWSBUCKET_PLACEHOLDER|${{ secrets.AWS_BUCKET_NAME }}|g" .env
-            
-            # Verify .env file was created correctly
-            echo "Created .env file with correct formatting"
-            cat .env | grep -v PASSWORD | grep -v SECRET | head -5
+          # Get the URLs from inputs or secrets
+          FACE_URL="${{ github.event.inputs.AI_FACE_DETECTION_URL || secrets.AI_FACE_DETECTION_URL }}"
+          KTP_URL="${{ github.event.inputs.AI_KTP_DETECTION_URL || secrets.AI_KTP_DETECTION_URL }}"
+          QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
           
-          - name: Create Nginx config file
-            run: |
-              # Function to parse URL and extract domain and path
-              function parse_url() {
-                local url=$1
-                # Remove protocol
-                local domain_path=${url#*://}
-                # Extract domain
-                local domain=${domain_path%%/*}
-                domain=${domain%%:*}
-                # Extract path
-                local path="/"
-                if [[ "$domain_path" == */* ]]; then
-                  path="/${domain_path#*/}"
-                fi
-                # Make sure path ends with a slash
-                if [[ "$path" != */ ]]; then
-                  path="${path}/"
-                fi
-                echo "$domain:$path"
+          # Automatically create WebSocket URLs
+          FACE_WS_URL="${FACE_URL}/ws"
+          KTP_WS_URL="${KTP_URL}/ws"
+          QRIS_WS_URL="${QRIS_URL}/ws"
+          
+          # Parse standard URLs
+          FACE_DOMAIN_PATH=$(parse_url "$FACE_URL")
+          KTP_DOMAIN_PATH=$(parse_url "$KTP_URL")
+          QRIS_DOMAIN_PATH=$(parse_url "$QRIS_URL")
+          
+          # Split into domain and path
+          FACE_DOMAIN=$(echo "$FACE_DOMAIN_PATH" | cut -d':' -f1)
+          FACE_PATH=$(echo "$FACE_DOMAIN_PATH" | cut -d':' -f2)
+          KTP_DOMAIN=$(echo "$KTP_DOMAIN_PATH" | cut -d':' -f1)
+          KTP_PATH=$(echo "$KTP_DOMAIN_PATH" | cut -d':' -f2)
+          QRIS_DOMAIN=$(echo "$QRIS_DOMAIN_PATH" | cut -d':' -f1)
+          QRIS_PATH=$(echo "$QRIS_DOMAIN_PATH" | cut -d':' -f2)
+          
+          # Create Nginx config
+          cat > nginx.conf << EOF
+          server {
+              listen 80;
+          
+              # Golang app
+              location / {
+                  proxy_pass http://golang-app:8080;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
               }
-              
-              # Get the URLs from inputs or secrets
-              FACE_URL="${{ github.event.inputs.AI_FACE_DETECTION_URL || secrets.AI_FACE_DETECTION_URL }}"
-              KTP_URL="${{ github.event.inputs.AI_KTP_DETECTION_URL || secrets.AI_KTP_DETECTION_URL }}"
-              QRIS_URL="${{ github.event.inputs.AI_QRIS_DETECTION_URL || secrets.AI_QRIS_DETECTION_URL }}"
-              
-              # Automatically create WebSocket URLs
-              FACE_WS_URL="${FACE_URL}/ws"
-              KTP_WS_URL="${KTP_URL}/ws"
-              QRIS_WS_URL="${QRIS_URL}/ws"
-              
-              # Parse standard URLs
-              FACE_DOMAIN_PATH=$(parse_url "$FACE_URL")
-              KTP_DOMAIN_PATH=$(parse_url "$KTP_URL")
-              QRIS_DOMAIN_PATH=$(parse_url "$QRIS_URL")
-              
-              # Split into domain and path
-              FACE_DOMAIN=$(echo "$FACE_DOMAIN_PATH" | cut -d':' -f1)
-              FACE_PATH=$(echo "$FACE_DOMAIN_PATH" | cut -d':' -f2)
-              KTP_DOMAIN=$(echo "$KTP_DOMAIN_PATH" | cut -d':' -f1)
-              KTP_PATH=$(echo "$KTP_DOMAIN_PATH" | cut -d':' -f2)
-              QRIS_DOMAIN=$(echo "$QRIS_DOMAIN_PATH" | cut -d':' -f1)
-              QRIS_PATH=$(echo "$QRIS_DOMAIN_PATH" | cut -d':' -f2)
-              
-              # Create Nginx config
-              cat > nginx.conf << EOF
-              server {
-                  listen 80;
-              
-                  # Golang app
-                  location / {
-                      proxy_pass http://golang-app:8080;
-                      proxy_set_header Host \$host;
-                      proxy_set_header X-Real-IP \$remote_addr;
-                      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  }
-              
-                  # Face detection API
-                  location /api/v1/detect/ {
-                      proxy_pass http://${FACE_DOMAIN}${FACE_PATH};
-                      proxy_set_header Host ${FACE_DOMAIN};
-                      proxy_set_header X-Real-IP \$remote_addr;
-                      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  }
-              
-                  # KTP API
-                  location /api/v1/ktp/ {
-                      proxy_pass http://${KTP_DOMAIN}${KTP_PATH};
-                      proxy_set_header Host ${KTP_DOMAIN};
-                      proxy_set_header X-Real-IP \$remote_addr;
-                      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  }
-              
-                  # QRIS API
-                  location /api/v1/qris/ {
-                      proxy_pass http://${QRIS_DOMAIN}${QRIS_PATH};
-                      proxy_set_header Host ${QRIS_DOMAIN};
-                      proxy_set_header X-Real-IP \$remote_addr;
-                      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  }
-              
-                  # WebSocket support for face detection
-                  location /api/v1/detect/ws {
-                      proxy_pass http://${FACE_DOMAIN}${FACE_PATH}ws;
-                      proxy_http_version 1.1;
-                      proxy_set_header Upgrade \$http_upgrade;
-                      proxy_set_header Connection "upgrade";
-                      proxy_set_header Host ${FACE_DOMAIN};
-                  }
-              
-                  # WebSocket support for KTP
-                  location /api/v1/ktp/ws {
-                      proxy_pass http://${KTP_DOMAIN}${KTP_PATH}ws;
-                      proxy_http_version 1.1;
-                      proxy_set_header Upgrade \$http_upgrade;
-                      proxy_set_header Connection "upgrade";
-                      proxy_set_header Host ${KTP_DOMAIN};
-                  }
-              
-                  # WebSocket support for QRIS
-                  location /api/v1/qris/ws {
-                      proxy_pass http://${QRIS_DOMAIN}${QRIS_PATH}ws;
-                      proxy_http_version 1.1;
-                      proxy_set_header Upgrade \$http_upgrade;
-                      proxy_set_header Connection "upgrade";
-                      proxy_set_header Host ${QRIS_DOMAIN};
-                  }
-              }
-              EOF
           
-          - name: Create/Update docker-compose.yml on server
-            env:
-              SERVER_IP: ${{ secrets.SERVER_IP }}
-              SERVER_USER: ${{ secrets.SERVER_USER }}
-              DEPLOYMENT_PATH: ${{ secrets.DEPLOYMENT_PATH }}
-              DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-              DOCKER_HUB_REPOSITORY: ${{ env.DOCKER_HUB_REPOSITORY }}
-            run: |
-              # Create a docker-compose.yml file that uses the Docker Hub image
-              cat > docker-compose.yml << EOF
-              services:
-                nginx:
-                  image: nginx:alpine
-                  container_name: nginx
-                  ports:
-                    - "80:80"
-                  volumes:
-                    - ./nginx/conf.d:/etc/nginx/conf.d
-                    - ./nginx/logs:/var/log/nginx
-                  depends_on:
-                    - golang-app
-                  restart: unless-stopped
-              
-                postgres:
-                  image: postgres:14-alpine
-                  container_name: postgres
-                  environment:
-                    POSTGRES_USER: \${DB_USER}
-                    POSTGRES_PASSWORD: \${DB_PASSWORD}
-                    POSTGRES_DB: \${DB_NAME}
-                  ports:
-                    - "5433:5432"  
-                  volumes:
-                    - postgres_data:/var/lib/postgresql/data
-                  restart: unless-stopped
-                  healthcheck:
-                    test: [ "CMD-SHELL", "pg_isready -U \${DB_USER}" ]
-                    interval: 10s
-                    timeout: 5s
-                    retries: 5
-              
-                redis-sentra: 
-                  image: redis:alpine
-                  container_name: redis-sentra  
-                  command: redis-server --requirepass \${REDIS_PASSWORD}
-                  ports:
-                    - "6380:6379"  
-                  volumes:
-                    - redis_data:/data
-                  restart: unless-stopped
-                  healthcheck:
-                    test: [ "CMD", "redis-cli", "ping" ]
-                    interval: 10s
-                    timeout: 5s
-                    retries: 5
-              
-                golang-app:
-                  image: ${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPOSITORY}:latest
-                  container_name: golang-app
-                  env_file: .env
-                  environment:
-                    - DB_HOST=postgres
-                    - DB_PORT=5432
-                    - REDIS_ADDRESS=redis-sentra:6379
-                  depends_on:
-                    postgres:
-                      condition: service_healthy
-                    redis-sentra: 
-                      condition: service_healthy
-                  restart: unless-stopped
-              
+              # Face detection API
+              location /api/v1/detect/ {
+                  proxy_pass http://${FACE_DOMAIN}${FACE_PATH};
+                  proxy_set_header Host ${FACE_DOMAIN};
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+              }
+          
+              # KTP API
+              location /api/v1/ktp/ {
+                  proxy_pass http://${KTP_DOMAIN}${KTP_PATH};
+                  proxy_set_header Host ${KTP_DOMAIN};
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+              }
+          
+              # QRIS API
+              location /api/v1/qris/ {
+                  proxy_pass http://${QRIS_DOMAIN}${QRIS_PATH};
+                  proxy_set_header Host ${QRIS_DOMAIN};
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+              }
+          
+              # WebSocket support for face detection
+              location /api/v1/detect/ws {
+                  proxy_pass http://${FACE_DOMAIN}${FACE_PATH}ws;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host ${FACE_DOMAIN};
+              }
+          
+              # WebSocket support for KTP
+              location /api/v1/ktp/ws {
+                  proxy_pass http://${KTP_DOMAIN}${KTP_PATH}ws;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host ${KTP_DOMAIN};
+              }
+          
+              # WebSocket support for QRIS
+              location /api/v1/qris/ws {
+                  proxy_pass http://${QRIS_DOMAIN}${QRIS_PATH}ws;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host ${QRIS_DOMAIN};
+              }
+          }
+          EOF
+
+      - name: Create/Update docker-compose.yml on server
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          DEPLOYMENT_PATH: ${{ secrets.DEPLOYMENT_PATH }}
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_HUB_REPOSITORY: ${{ env.DOCKER_HUB_REPOSITORY }}
+        run: |
+          # Create a docker-compose.yml file that uses the Docker Hub image
+          cat > docker-compose.yml << EOF
+          services:
+            nginx:
+              image: nginx:alpine
+              container_name: nginx
+              ports:
+                - "80:80"
               volumes:
-                postgres_data:
-                redis_data:
-              EOF
-              
-              # Make sure the nginx directory exists on the server
-              ssh $SERVER_USER@$SERVER_IP "mkdir -p $DEPLOYMENT_PATH/nginx/conf.d"
-              
-              # Copy .env, nginx.conf, and docker-compose.yml to server
-              scp .env $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/
-              scp nginx.conf $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/nginx/conf.d/default.conf
-              scp docker-compose.yml $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/
-              
-              # Deploy application
-              ssh $SERVER_USER@$SERVER_IP "cd $DEPLOYMENT_PATH && \
-                docker-compose pull && \
-                docker-compose down && \
-                docker-compose up -d && \
-                docker exec nginx nginx -s reload && \
-                docker-compose exec -T golang-app make migrate-up || true"
-              
-              echo "Deployment completed successfully!"
+                - ./nginx/conf.d:/etc/nginx/conf.d
+                - ./nginx/logs:/var/log/nginx
+              depends_on:
+                - golang-app
+              restart: unless-stopped
+          
+            postgres:
+              image: postgres:14-alpine
+              container_name: postgres
+              environment:
+                POSTGRES_USER: \${DB_USER}
+                POSTGRES_PASSWORD: \${DB_PASSWORD}
+                POSTGRES_DB: \${DB_NAME}
+              ports:
+                - "5433:5432"  
+              volumes:
+                - postgres_data:/var/lib/postgresql/data
+              restart: unless-stopped
+              healthcheck:
+                test: [ "CMD-SHELL", "pg_isready -U \${DB_USER}" ]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+          
+            redis-sentra: 
+              image: redis:alpine
+              container_name: redis-sentra  
+              command: redis-server --requirepass \${REDIS_PASSWORD}
+              ports:
+                - "6380:6379"  
+              volumes:
+                - redis_data:/data
+              restart: unless-stopped
+              healthcheck:
+                test: [ "CMD", "redis-cli", "ping" ]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+          
+            golang-app:
+              image: ${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPOSITORY}:latest
+              container_name: golang-app
+              env_file: .env
+              environment:
+                - DB_HOST=postgres
+                - DB_PORT=5432
+                - REDIS_ADDRESS=redis-sentra:6379
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis-sentra: 
+                  condition: service_healthy
+              restart: unless-stopped
+          
+          volumes:
+            postgres_data:
+            redis_data:
+          EOF
+          
+          # Make sure the nginx directory exists on the server
+          ssh $SERVER_USER@$SERVER_IP "mkdir -p $DEPLOYMENT_PATH/nginx/conf.d"
+          
+          # Copy .env, nginx.conf, and docker-compose.yml to server
+          scp .env $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/
+          scp nginx.conf $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/nginx/conf.d/default.conf
+          scp docker-compose.yml $SERVER_USER@$SERVER_IP:$DEPLOYMENT_PATH/
+          
+          # Deploy application
+          ssh $SERVER_USER@$SERVER_IP "cd $DEPLOYMENT_PATH && \
+            docker-compose pull && \
+            docker-compose down && \
+            docker-compose up -d && \
+            docker exec nginx nginx -s reload && \
+            docker-compose exec -T golang-app make migrate-up || true"
+          
+          echo "Deployment completed successfully!"

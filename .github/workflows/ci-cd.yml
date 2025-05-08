@@ -202,13 +202,17 @@ jobs:
           source: ".env"
           target: "~/sentra-app"
 
-      - name: Copy private key for DOKU
-        if: "${{ secrets.DOKU_PRIVATE_KEY != '' }}"
+      - name: Create DOKU private key
+        env:
+          DOKU_PRIVATE_KEY: ${{ secrets.DOKU_PRIVATE_KEY }}
         run: |
-          echo "${{ secrets.DOKU_PRIVATE_KEY }}" > private.key
+          if [ -n "$DOKU_PRIVATE_KEY" ]; then
+            echo "$DOKU_PRIVATE_KEY" > private.key
+            echo "HAS_DOKU_KEY=true" >> $GITHUB_ENV
+          fi
 
       - name: Copy DOKU key file
-        if: "${{ secrets.DOKU_PRIVATE_KEY != '' }}"
+        if: env.HAS_DOKU_KEY == 'true'
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.SERVER_IP }}

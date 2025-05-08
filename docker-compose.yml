@@ -7,7 +7,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/conf.d/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/logs:/var/log/nginx
     depends_on:
       - golang-app
@@ -47,18 +47,25 @@ services:
       retries: 5
 
   golang-app:
-    image: ${DOCKER_HUB_USERNAME}/sentra-backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: golang-app
     env_file:
       - .env
+    volumes:
+      - ./private.key:/home/appuser/private.key:ro
     ports:
       - "${APP_PORT}:${APP_PORT}"
-    volumes:
-      - ./private.key:/app/private.key:ro
     depends_on:
       - postgres
       - redis-sentra
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${APP_PORT}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

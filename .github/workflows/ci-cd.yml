@@ -115,7 +115,9 @@ jobs:
           DB_SSLMODE=${{ secrets.DB_SSLMODE }}
 
           # Environment config
-          PRODUCTION=true
+          ENV=production
+          
+          DOCKER_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}
 
           # Fiber config
           APP_PORT=${{ secrets.APP_PORT }}

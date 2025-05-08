@@ -108,7 +108,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.BIZNET_SSH_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             mkdir -p ~/sentra-app/nginx/conf.d
             mkdir -p ~/sentra-app/nginx/logs
@@ -118,7 +118,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.BIZNET_SSH_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "nginx/conf.d/nginx.conf"
           target: "~/sentra-app"
           strip_components: 0
@@ -128,7 +128,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.BIZNET_SSH_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "docker-compose.yml"
           target: "~/sentra-app"
 
@@ -198,7 +198,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.BIZNET_SSH_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: ".env"
           target: "~/sentra-app"
 
@@ -213,7 +213,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.BIZNET_SSH_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "private.key"
           target: "~/sentra-app"
 

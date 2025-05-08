@@ -110,7 +110,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "nginx/conf.d/nginx.conf"
-          target: "/path/to/project/nginx/conf.d/"
+          target: "/sentra-backend/nginx/conf.d/"
 
       - name: Create .env file
         run: |
@@ -177,7 +177,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: ".env"
-          target: "/path/to/project/"
+          target: "/sentra-backend/"
 
       - name: Deploy to Biznet server
         uses: appleboy/ssh-action@v0.1.10
@@ -186,7 +186,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /path/to/project
+            cd /sentra-backend
             docker-compose pull
             docker-compose down
             docker-compose up -d

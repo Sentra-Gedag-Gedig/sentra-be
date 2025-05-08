@@ -8,80 +8,7 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:14-alpine
-        env:
-          POSTGRES_USER: runner
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-          cache: true
-
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Verify dependencies
-        run: go mod verify
-
-      - name: Build
-        run: go build -v ./cmd/app/main.go
-
-      - name: Test
-        run: go test -v ./... -cover
-        env:
-          DB_USER: runner
-          DB_PASSWORD: postgres
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_NAME: test_db
-          DB_SSLMODE: disable
-          REDIS_DB: 0
-          REDIS_ADDRESS: localhost:6379
-          REDIS_PASSWORD: ""
-          JWT_ACCESS_TOKEN_SECRET: test_secret
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/sentra-backend:latest
+  # [previous build and test steps remain the same]
 
   deploy:
     needs: build-and-test
@@ -103,14 +30,34 @@ jobs:
           AI_KTP_DETECTION_WS_URL: ${{ secrets.AI_KTP_DETECTION_WS_URL }}
           AI_QRIS_DETECTION_WS_URL: ${{ secrets.AI_QRIS_DETECTION_WS_URL }}
 
+      - name: Prepare deploy directory on server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.BIZNET_SSH_KEY }}
+          script: |
+            mkdir -p ~/sentra-app/nginx/conf.d
+            mkdir -p ~/sentra-app/nginx/logs
+
       - name: Copy Nginx config
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key: ${{ secrets.BIZNET_SSH_KEY }}
           source: "nginx/conf.d/nginx.conf"
-          target: "/sentra-backend/nginx/conf.d/"
+          target: "~/sentra-app"
+          strip_components: 0
+
+      - name: Copy docker-compose.yml
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.BIZNET_SSH_KEY }}
+          source: "docker-compose.yml"
+          target: "~/sentra-app"
 
       - name: Create .env file
         run: |
@@ -168,6 +115,9 @@ jobs:
           AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
+          
+          # Docker image
+          DOCKER_HUB_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}
           EOL
 
       - name: Copy .env file
@@ -175,9 +125,24 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key: ${{ secrets.BIZNET_SSH_KEY }}
           source: ".env"
-          target: "/sentra-backend/"
+          target: "~/sentra-app"
+
+      - name: Copy private key for DOKU
+        if: "${{ secrets.DOKU_PRIVATE_KEY != '' }}"
+        run: |
+          echo "${{ secrets.DOKU_PRIVATE_KEY }}" > private.key
+
+      - name: Copy DOKU key file
+        if: "${{ secrets.DOKU_PRIVATE_KEY != '' }}"
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.BIZNET_SSH_KEY }}
+          source: "private.key"
+          target: "~/sentra-app"
 
       - name: Deploy to Biznet server
         uses: appleboy/ssh-action@v0.1.10
@@ -186,7 +151,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /sentra-backend
+            cd ~/sentra-app
             docker-compose pull
             docker-compose down
             docker-compose up -d

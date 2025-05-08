@@ -14,9 +14,9 @@ jobs:
       postgres:
         image: postgres:14-alpine
         env:
-          POSTGRES_USER: runner
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
+          POSTGRES_USER: ${{ secrets.DB_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.DB_NAME }}
         ports:
           - 5432:5432
         options: >-
@@ -41,7 +41,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.24'
           cache: true
 
       - name: Install dependencies
@@ -56,16 +56,16 @@ jobs:
       - name: Test
         run: go test -v ./... -cover
         env:
-          DB_USER: runner
-          DB_PASSWORD: postgres
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_HOST: localhost
           DB_PORT: 5432
-          DB_NAME: test_db
+          DB_NAME: ${{ secrets.DB_NAME }}
           DB_SSLMODE: disable
           REDIS_DB: 0
           REDIS_ADDRESS: localhost:6379
           REDIS_PASSWORD: ""
-          JWT_ACCESS_TOKEN_SECRET: test_secret
+          JWT_ACCESS_TOKEN_SECRET: ${{ secrets.JWT_ACCESS_TOKEN_SECRET }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -103,6 +103,75 @@ jobs:
           AI_KTP_DETECTION_WS_URL: ${{ secrets.AI_KTP_DETECTION_WS_URL }}
           AI_QRIS_DETECTION_WS_URL: ${{ secrets.AI_QRIS_DETECTION_WS_URL }}
 
+      - name: Create .env file
+        run: |
+          cat << EOF > .env
+          # Database Config
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_SSLMODE=${{ secrets.DB_SSLMODE }}
+
+          # Environment config
+          PRODUCTION=true
+
+          # Fiber config
+          APP_PORT=${{ secrets.APP_PORT }}
+          APP_ADDR=${{ secrets.APP_ADDR }}
+
+          JWT_ACCESS_TOKEN_SECRET=${{ secrets.JWT_ACCESS_TOKEN_SECRET }}
+
+          # Google OAuth2
+          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_STATE=${{ secrets.GOOGLE_STATE }}
+
+          # Redis
+          REDIS_DB=${{ secrets.REDIS_DB }}
+          REDIS_ADDRESS=${{ secrets.REDIS_ADDRESS }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+
+          # SMTP
+          SMTP_MAIL=${{ secrets.SMTP_MAIL }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+
+          # AI Services URLs
+          AI_FACE_DETECTION_URL=${{ secrets.AI_FACE_DETECTION_URL }}
+          AI_KTP_DETECTION_URL=${{ secrets.AI_KTP_DETECTION_URL }}
+          AI_QRIS_DETECTION_URL=${{ secrets.AI_QRIS_DETECTION_URL }}
+          AI_FACE_DETECTION_WS_URL=${{ secrets.AI_FACE_DETECTION_WS_URL }}
+          AI_KTP_DETECTION_WS_URL=${{ secrets.AI_KTP_DETECTION_WS_URL }}
+          AI_QRIS_DETECTION_WS_URL=${{ secrets.AI_QRIS_DETECTION_WS_URL }}
+
+          # Gemini
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL_NAME=${{ secrets.GEMINI_MODEL_NAME }}
+
+          # Doku
+          DOKU_CLIENT_ID=${{ secrets.DOKU_CLIENT_ID }}
+          DOKU_SECRET_KEY=${{ secrets.DOKU_SECRET_KEY }}
+          DOKU_IS_PRODUCTION=${{ secrets.DOKU_IS_PRODUCTION }}
+          DOKU_PUBLIC_KEY=${{ secrets.DOKU_PUBLIC_KEY }}
+          PASSPHRASE=${{ secrets.PASSPHRASE }}
+
+          # AWS S3
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
+          EOF
+
+      - name: Create DOKU private key
+        env:
+          DOKU_PRIVATE_KEY: ${{ secrets.DOKU_PRIVATE_KEY }}
+        run: |
+          if [ -n "$DOKU_PRIVATE_KEY" ]; then
+            echo "$DOKU_PRIVATE_KEY" > private.key
+            echo "HAS_DOKU_KEY=true" >> $GITHUB_ENV
+          fi
+
       - name: Prepare deploy directory on server
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -132,14 +201,14 @@ jobs:
           source: "docker-compose.yml"
           target: "~/sentra-app"
 
-      - name: Create DOKU private key
-        env:
-          DOKU_PRIVATE_KEY: ${{ secrets.DOKU_PRIVATE_KEY }}
-        run: |
-          if [ -n "$DOKU_PRIVATE_KEY" ]; then
-            echo "$DOKU_PRIVATE_KEY" > private.key
-            echo "HAS_DOKU_KEY=true" >> $GITHUB_ENV
-          fi
+      - name: Copy .env file
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: ".env"
+          target: "~/sentra-app"
 
       - name: Copy DOKU key file
         if: env.HAS_DOKU_KEY == 'true'

@@ -7,7 +7,6 @@ import (
 )
 
 func GetUserDifferenceData(DbUser entity.User, NewUser auth.UpdateUserRequest) (entity.User, error) {
-	// Start with a copy of all existing user data
 	result := DbUser
 
 	birthDate, err := time.Parse("2006-01-02", NewUser.BirthDate)
@@ -20,7 +19,6 @@ func GetUserDifferenceData(DbUser entity.User, NewUser auth.UpdateUserRequest) (
 		return entity.User{}, err
 	}
 
-	// Then only override the fields that changed
 	if NewUser.Name != "" && NewUser.Name != DbUser.Name {
 		result.Name = NewUser.Name
 	}
@@ -79,7 +77,6 @@ func GetUserDifferenceData(DbUser entity.User, NewUser auth.UpdateUserRequest) (
 		result.BirthDate = birthDate
 	}
 
-	// Make sure we preserve the IsVerified status
 	result.IsVerified = DbUser.IsVerified
 
 	return result, nil

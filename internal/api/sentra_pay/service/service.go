@@ -4,6 +4,7 @@ import (
 	authRepository "ProjectGolang/internal/api/auth/repository"
 	sentrapay "ProjectGolang/internal/api/sentra_pay"
 	sentrapayRepository "ProjectGolang/internal/api/sentra_pay/repository"
+	"ProjectGolang/pkg/bcrypt"
 	"ProjectGolang/pkg/doku"
 	"ProjectGolang/pkg/utils"
 	"context"
@@ -16,6 +17,9 @@ type ISentraPayService interface {
 	GetWalletBalance(ctx context.Context, userID string) (*sentrapay.WalletBalance, error)
 	GetTransactionHistory(ctx context.Context, userID string, page, limit int) (*sentrapay.TransactionHistoryResponse, error)
 	CheckTransactionStatus(ctx context.Context, referenceNo string) (string, error)
+
+	DecodeQRIS(ctx context.Context, req sentrapay.QRISDecodeRequest) (*sentrapay.QRISDecodeResponse, error)
+	PaymentQRIS(ctx context.Context, userID string, req sentrapay.QRISPaymentRequest) (*sentrapay.QRISPaymentResponse, error)
 }
 
 type sentraPayService struct {
@@ -24,6 +28,7 @@ type sentraPayService struct {
 	dokuService      doku.IDokuService
 	authRepo         authRepository.Repository
 	utils            utils.IUtils
+	bcryptUtils      bcrypt.IBcrypt
 }
 
 func NewSentraPayService(
@@ -32,6 +37,7 @@ func NewSentraPayService(
 	ds doku.IDokuService,
 	ar authRepository.Repository,
 	utils utils.IUtils,
+	bcryptUtils bcrypt.IBcrypt,
 ) ISentraPayService {
 	return &sentraPayService{
 		log:              log,
@@ -39,5 +45,6 @@ func NewSentraPayService(
 		dokuService:      ds,
 		authRepo:         ar,
 		utils:            utils,
+		bcryptUtils:      bcryptUtils,
 	}
 }

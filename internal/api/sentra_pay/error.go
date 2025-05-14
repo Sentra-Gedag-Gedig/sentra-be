@@ -4,42 +4,34 @@ import (
 	"ProjectGolang/pkg/response"
 )
 
-//var (
-//	ErrInsufficientBalance = errors.New("insufficient balance")
-//
-//	ErrTransactionNotFound = errors.New("transaction not found")
-//
-//	ErrCreateTransaction = errors.New("failed to create transaction")
-//
-//	ErrUpdateTransaction = errors.New("failed to update transaction")
-//
-//	ErrDeleteTransaction = errors.New("failed to delete transaction")
-//
-//	ErrCreateVirtualAccount = errors.New("failed to create virtual account")
-//
-//	ErrInvalidBank = errors.New("invalid bank selection")
-//
-//	ErrInvalidAmount = errors.New("invalid amount")
-//
-//	ErrUserNotFound = errors.New("user not found")
-//
-//	ErrWalletNotFound = errors.New("wallet not found")
-//
-//	ErrInvalidCallback = errors.New("invalid callback data")
-//
-//	ErrInvalidTransactionState = errors.New("invalid transaction state")
-//)
-
 var (
-	ErrInsufficientBalance     = response.NewError(400, "insufficient balance")
-	ErrTransactionNotFound     = response.NewError(404, "transaction not found")
-	ErrCreateTransaction       = response.NewError(500, "failed to create transaction")
-	ErrUpdateTransaction       = response.NewError(500, "failed to update transaction")
-	ErrDeleteTransaction       = response.NewError(500, "failed to delete transaction")
-	ErrCreateVirtualAccount    = response.NewError(500, "failed to create virtual account")
-	ErrInvalidBank             = response.NewError(400, "invalid bank selection")
-	ErrInvalidAmount           = response.NewError(400, "invalid amount")
-	ErrWalletNotFound          = response.NewError(404, "wallet not found")
-	ErrInvalidCallback         = response.NewError(400, "invalid callback data")
-	ErrInvalidTransactionState = response.NewError(400, "invalid transaction state")
+	ErrInvalidQRISCode           = response.NewError(400, "invalid QRIS code")
+	ErrQRISExpired               = response.NewError(400, "QRIS has expired")
+	ErrQRISAlreadyUsed           = response.NewError(400, "QRIS has already been used")
+	ErrQRISNotFound              = response.NewError(404, "QRIS not found")
+	ErrInvalidMerchant           = response.NewError(400, "invalid merchant information")
+	ErrInvalidPIN                = response.NewError(401, "invalid PIN")
+	ErrPINAttemptExceeded        = response.NewError(429, "too many PIN attempts")
+	ErrMaxDailyLimitExceeded     = response.NewError(400, "daily transaction limit exceeded")
+	ErrMaxPerTransactionExceeded = response.NewError(400, "amount exceeds per transaction limit")
+	ErrFixedAmountMismatch       = response.NewError(400, "amount doesn't match QRIS fixed amount")
+	ErrQRISPaymentFailed         = response.NewError(500, "QRIS payment failed")
+	ErrQRISPaymentPending        = response.NewError(202, "QRIS payment is pending")
+	ErrDuplicateTransaction      = response.NewError(409, "duplicate transaction")
+	ErrMerchantOffline           = response.NewError(503, "merchant is currently offline")
+	ErrInsufficientFee           = response.NewError(400, "insufficient balance for fee")
+	ErrInsufficientForTotal      = response.NewError(400, "insufficient balance for total amount")
+	ErrQRISServiceUnavailable    = response.NewError(503, "QRIS service unavailable")
+	ErrTimeoutScanning           = response.NewError(504, "timeout while scanning QRIS")
+	ErrInsufficientBalance       = response.NewError(400, "insufficient balance")
+	ErrTransactionNotFound       = response.NewError(404, "transaction not found")
+	ErrCreateTransaction         = response.NewError(500, "failed to create transaction")
+	ErrUpdateTransaction         = response.NewError(500, "failed to update transaction")
+	ErrDeleteTransaction         = response.NewError(500, "failed to delete transaction")
+	ErrCreateVirtualAccount      = response.NewError(500, "failed to create virtual account")
+	ErrInvalidBank               = response.NewError(400, "invalid bank selection")
+	ErrInvalidAmount             = response.NewError(400, "invalid amount")
+	ErrWalletNotFound            = response.NewError(404, "wallet not found")
+	ErrInvalidCallback           = response.NewError(400, "invalid callback data")
+	ErrInvalidTransactionState   = response.NewError(400, "invalid transaction state")
 )

@@ -427,7 +427,7 @@ func getWebSocketURL(detectionType detection.DetectionType) string {
 	case detection.QRISDetection:
 		url := os.Getenv("AI_QRIS_DETECTION_URL")
 		if url == "" {
-			url = "ws://localhost:8001/api/v1/qris/ws"
+			url = "ws://localhost:8081/api/v1/qris/ws"
 		}
 		return url
 	default:

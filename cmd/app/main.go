@@ -15,10 +15,12 @@ import (
 
 func main() {
 	logger := log.NewLogger()
+	if err := godotenv.Load(); err != nil {
+		logger.Warnf("Error loading .env file: %v", err)
+	}
+
 	if os.Getenv("ENV") == "development" {
-		if err := godotenv.Load(); err != nil {
-			logger.Fatalf("Error loading .env file: %v", err)
-		}
+		logger.Info("Running in development mode")
 	}
 
 	fiberApp := config.NewFiber(logger)

@@ -78,3 +78,8 @@ type walletRepository struct {
 	q   SQLExecutor
 	log *logrus.Logger
 }
+
+type qrisRepository struct {
+	q   SQLExecutor
+	log *logrus.Logger
+}

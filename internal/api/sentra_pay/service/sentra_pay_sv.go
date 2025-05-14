@@ -93,6 +93,15 @@ func (s *sentraPayService) CreateTopUpTransaction(ctx context.Context, userID st
 		return nil, err
 	}
 
+	email := user.Email
+	if email == "" {
+		email = fmt.Sprintf("%s@placeholder.com", userID)
+		s.log.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"user_id":    userID,
+		}).Warn("Using placeholder email for DOKU integration")
+	}
+
 	dokuReq := doku.CreateVaRequest{
 		UserID:          userID,
 		Name:            user.Name,

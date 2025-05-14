@@ -1,6 +1,13 @@
 package doku
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/PTNUSASATUINTIARTHA-DOKU/doku-golang-library/controllers"
 	"github.com/PTNUSASATUINTIARTHA-DOKU/doku-golang-library/doku"
@@ -8,6 +15,8 @@ import (
 	createVa "github.com/PTNUSASATUINTIARTHA-DOKU/doku-golang-library/models/va/createVa"
 	"github.com/PTNUSASATUINTIARTHA-DOKU/doku-golang-library/models/va/notification/payment"
 	"github.com/sirupsen/logrus"
+	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -19,48 +28,14 @@ type IDokuService interface {
 	CreateVirtualAccount(req CreateVaRequest) (*CreateVaResponse, error)
 	ValidateCallback(token string, notification payment.PaymentNotificationRequestBodyDTO) (payment.PaymentNotificationResponseBodyDTO, error)
 	CheckVAStatus(vaNumber string, customerNo string, partnerServiceId string, trxId string) (bool, error)
+	DecodeQRIS(qrContent string) (*DecodeQRISResponse, error)
+	PaymentQRIS(qrContent string, transactionAmount, feeAmount float64, authCode string) (*PaymentQRISResponse, error)
 }
 
 type dokuService struct {
 	client *doku.Snap
 	log    *logrus.Logger
 }
-
-type CreateVaRequest struct {
-	UserID          string
-	Name            string
-	Email           string
-	Phone           string
-	Amount          float64
-	TrxId           string
-	Bank            string
-	ExpiredDuration time.Duration
-	ReusableStatus  bool
-}
-
-type CreateVaResponse struct {
-	VirtualAccountNo  string
-	Bank              string
-	Amount            float64
-	TransactionID     string
-	ExpiryDate        string
-	VirtualAccountURL string
-}
-
-const (
-	BankBCA      = "VIRTUAL_ACCOUNT_BCA"
-	BankMANDIRI  = "VIRTUAL_ACCOUNT_BANK_MANDIRI"
-	BankBRI      = "VIRTUAL_ACCOUNT_BRI"
-	BankBNI      = "VIRTUAL_ACCOUNT_BNI"
-	BankDANAMON  = "VIRTUAL_ACCOUNT_BANK_DANAMON"
-	BankPERMATA  = "VIRTUAL_ACCOUNT_BANK_PERMATA"
-	BankMAYBANK  = "VIRTUAL_ACCOUNT_MAYBANK"
-	BankBTN      = "VIRTUAL_ACCOUNT_BTN"
-	BankBSI      = "VIRTUAL_ACCOUNT_BSI"
-	BankCIMB     = "VIRTUAL_ACCOUNT_BANK_CIMB"
-	BankSINARMAS = "VIRTUAL_ACCOUNT_SINARMAS"
-	BankDOKU     = "VIRTUAL_ACCOUNT_DOKU"
-)
 
 func NewDokuService(log *logrus.Logger) IDokuService {
 	return &dokuService{
@@ -214,4 +189,195 @@ func (d *dokuService) CheckVAStatus(vaNumber string, customerNo string, partnerS
 	}
 
 	return false, nil
+}
+
+func (d *dokuService) DecodeQRIS(qrContent string) (*DecodeQRISResponse, error) {
+	partnerReferenceNo := fmt.Sprintf("QRIS%d", time.Now().Unix())
+
+	request := DecodeQRISRequest{
+		PartnerReferenceNo: partnerReferenceNo,
+		QRContent:          qrContent,
+		ScanTime:           time.Now().Format("2006-01-02T15:04:05-07:00"),
+	}
+
+	tokenB2B := d.client.GetTokenB2B()
+	if tokenB2B.ResponseCode != "2007300" {
+		return nil, fmt.Errorf("failed to get B2B token: %s", tokenB2B.ResponseMessage)
+	}
+
+	timestamp := time.Now().Format("2006-01-02T15:04:05-07:00")
+	externalId := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	reqBody, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	endpointUrl := "/snap-adapter/b2b/v1.0/qr/qr-mpm-decode"
+	signature := generateSignature("POST", endpointUrl, tokenB2B.AccessToken, reqBody, timestamp, d.client.SecretKey)
+
+	var url string
+	if d.client.IsProduction {
+		url = "https://api.doku.com"
+	} else {
+		url = "https://api-sandbox.doku.com"
+	}
+	url += endpointUrl
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-PARTNER-ID", d.client.ClientId)
+	req.Header.Set("X-TIMESTAMP", timestamp)
+	req.Header.Set("X-EXTERNAL-ID", externalId)
+	req.Header.Set("X-SIGNATURE", signature)
+	req.Header.Set("Authorization", "Bearer "+tokenB2B.AccessToken)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	d.log.WithFields(logrus.Fields{
+		"response_raw": string(respBody),
+	}).Debug("QRIS decode raw response")
+
+	var response DecodeQRISResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		d.log.WithFields(logrus.Fields{
+			"error":        err.Error(),
+			"response_raw": string(respBody),
+		}).Error("Failed to unmarshal QRIS response")
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	if response.ResponseCode != "2004800" {
+		return nil, fmt.Errorf("decode QRIS failed: %s", response.ResponseMessage)
+	}
+
+	return &response, nil
+}
+
+func (d *dokuService) PaymentQRIS(qrContent string, transactionAmount, feeAmount float64, authCode string) (*PaymentQRISResponse, error) {
+	partnerReferenceNo := fmt.Sprintf("PAY%d", time.Now().Unix())
+
+	request := PaymentQRISRequest{
+		PartnerReferenceNo: partnerReferenceNo,
+		Amount: Amount{
+			Value:    json.Number(fmt.Sprintf("%.2f", transactionAmount)),
+			Currency: "IDR",
+		},
+		FeeAmount: Amount{
+			Value:    json.Number(fmt.Sprintf("%.2f", feeAmount)),
+			Currency: "IDR",
+		},
+		AdditionalInfo: PaymentQRISAdditionalInfo{
+			QRContent: qrContent,
+			Origin: PaymentOrigin{
+				Product:       "SDK",
+				Source:        "Golang",
+				SourceVersion: "1.0.0",
+				System:        "sentra-pay",
+				ApiFormat:     "SNAP",
+			},
+		},
+	}
+
+	tokenB2B := d.client.GetTokenB2B()
+	if tokenB2B.ResponseCode != "2007300" {
+		return nil, fmt.Errorf("failed to get B2B token: %s", tokenB2B.ResponseMessage)
+	}
+
+	tokenB2B2C, err := d.client.GetTokenB2B2C(authCode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get B2B2C token: %v", err)
+	}
+
+	if tokenB2B2C.ResponseCode != "2007300" {
+		return nil, fmt.Errorf("invalid B2B2C token response: %s", tokenB2B2C.ResponseMessage)
+	}
+
+	timestamp := time.Now().Format("2006-01-02T15:04:05-07:00")
+	externalId := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	reqBody, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	endpointUrl := "/snap-adapter/b2b2c/v1.0/qr/qr-mpm-payment"
+	signature := generateSignature("POST", endpointUrl, tokenB2B.AccessToken, reqBody, timestamp, d.client.SecretKey)
+
+	var url string
+	if d.client.IsProduction {
+		url = "https://api.doku.com"
+	} else {
+		url = "https://api-sandbox.doku.com"
+	}
+	url += endpointUrl
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-PARTNER-ID", d.client.ClientId)
+	req.Header.Set("X-TIMESTAMP", timestamp)
+	req.Header.Set("X-EXTERNAL-ID", externalId)
+	req.Header.Set("X-SIGNATURE", signature)
+	req.Header.Set("Authorization", "Bearer "+tokenB2B.AccessToken)
+	req.Header.Set("Authorization-Customer", "Bearer "+tokenB2B2C.AccessToken)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	d.log.Debug(fmt.Sprintf("[response_raw:%s] QRIS payment raw response", string(respBody)))
+
+	var response PaymentQRISResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	if response.ResponseCode != "2005500" {
+		d.log.Warn(fmt.Sprintf("[response_code:%s] [response_message:%s] Unexpected response code for QRIS payment",
+			response.ResponseCode, response.ResponseMessage))
+		return nil, fmt.Errorf("payment QRIS failed: %s", response.ResponseMessage)
+	}
+
+	return &response, nil
+}
+
+func generateSignature(httpMethod, endpointUrl, accessToken string, minifiedRequestBody []byte, timestamp, secretKey string) string {
+
+	hash := sha256.New()
+	hash.Write(minifiedRequestBody)
+	hashedBody := hex.EncodeToString(hash.Sum(nil))
+
+	stringToSign := httpMethod + ":" + endpointUrl + ":" + accessToken + ":" + strings.ToLower(hashedBody) + ":" + timestamp
+
+	hmac := hmac.New(sha512.New, []byte(secretKey))
+	hmac.Write([]byte(stringToSign))
+	signature := base64.StdEncoding.EncodeToString(hmac.Sum(nil))
+
+	return signature
 }

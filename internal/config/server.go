@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
 	"os"
@@ -226,7 +227,8 @@ func (s *Server) RegisterHandler() {
 	dokuClient := doku.NewDokuService(s.log)
 	dokuClient.Init()
 	dokuRepo := sentrapayRepository.New(s.db, s.log)
-	dokuServices := sentrapayService.NewSentraPayService(s.log, dokuRepo, dokuClient, authRepo, s.utils)
+
+	dokuServices := sentrapayService.NewSentraPayService(s.log, dokuRepo, dokuClient, authRepo, s.utils, s.bcryptUtils)
 	dokuHandlers := sentrapayHandler.New(s.log, s.validator, s.middleware, dokuServices)
 
 	//Blog Domain
@@ -240,6 +242,17 @@ func (s *Server) RegisterHandler() {
 
 func (s *Server) Run() error {
 	router := s.engine.Group("/api/v1")
+
+	corsMiddleware := cors.New(cors.Config{
+		AllowOrigins:     "https://sentra-web-pi.vercel.app, http://localhost:3000",
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Request-ID",
+		ExposeHeaders:    "X-Request-ID",
+		AllowCredentials: true,
+		MaxAge:           300,
+	})
+
+	s.engine.Use(corsMiddleware)
 	s.engine.Use(s.middleware.NewRequestIDMiddleware())
 
 	for _, h := range s.handlers {

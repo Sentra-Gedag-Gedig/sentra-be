@@ -38,4 +38,7 @@ func (h *SentraPayHandler) Start(srv fiber.Router) {
 	wallet.Get("/transactions/status/:reference_no", h.middleware.NewTokenMiddleware, h.CheckTransactionStatus)
 
 	wallet.Post("/callback", h.PaymentCallback)
+
+	wallet.Post("/qris/decode", h.middleware.NewTokenMiddleware, h.DecodeQRIS)
+	wallet.Post("/qris/payment", h.middleware.NewTokenMiddleware, h.PaymentQRIS)
 }

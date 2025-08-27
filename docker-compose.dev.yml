@@ -1,0 +1,177 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:1.23.1-alpine
+    container_name: sentra-nginx-dev
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      golang-app:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - sentra-dev-network
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: sentra-postgres-dev
+    environment:
+      POSTGRES_USER: ${DB_USER:-sentra_dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sentra_dev_password}
+      POSTGRES_DB: ${DB_NAME:-sentra_dev_db}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      # Mount init scripts for development
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sentra_dev} -d ${DB_NAME:-sentra_dev_db}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sentra-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: sentra-redis-dev
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_password} --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+      # Mount redis config for development
+      - ./redis/redis-dev.conf:/usr/local/etc/redis/redis.conf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sentra-dev-network
+
+  golang-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        - GO_ENV=development
+    container_name: sentra-backend-dev
+    environment:
+      # Database Config
+      DB_USER: ${DB_USER:-sentra_dev}
+      DB_PASSWORD: ${DB_PASSWORD:-sentra_dev_password}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-sentra_dev_db}
+      DB_SSLMODE: disable
+      
+      # Environment config
+      ENV: development
+      GO_ENV: development
+      
+      # Fiber config
+      APP_PORT: ${APP_PORT:-8080}
+      APP_ADDR: 0.0.0.0
+      
+      # JWT Config (use weaker key for development)
+      JWT_ACCESS_TOKEN_SECRET: ${JWT_ACCESS_TOKEN_SECRET:-dev-jwt-secret-key-not-for-production}
+      
+      # Google OAuth2
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_STATE: ${GOOGLE_STATE:-dev-state-string}
+      
+      # Redis
+      REDIS_DB: 0
+      REDIS_ADDRESS: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_dev_password}
+      
+      # SMTP (use test credentials)
+      SMTP_MAIL: ${SMTP_MAIL:-test@example.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-test-password}
+      
+      # AI Services URLs (local development)
+      AI_FACE_DETECTION_URL: ${AI_FACE_DETECTION_URL:-ws://host.docker.internal:8000/api/v1/face/ws}
+      AI_KTP_DETECTION_URL: ${AI_KTP_DETECTION_URL:-ws://host.docker.internal:8001/api/v1/ktp/ws}
+      AI_QRIS_DETECTION_URL: ${AI_QRIS_DETECTION_URL:-ws://host.docker.internal:8002/api/v1/qris/ws}
+      
+      # Gemini (optional for development)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_NAME: ${GEMINI_MODEL_NAME:-gemini-pro-vision}
+      
+      # DOKU (use sandbox for development)
+      DOKU_CLIENT_ID: ${DOKU_CLIENT_ID:-}
+      DOKU_SECRET_KEY: ${DOKU_SECRET_KEY:-}
+      DOKU_IS_PRODUCTION: false
+      DOKU_PUBLIC_KEY: ${DOKU_PUBLIC_KEY:-}
+      PASSPHRASE: ${PASSPHRASE:-}
+      
+      # AWS S3 (optional for development, can use MinIO instead)
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_BUCKET_NAME: ${AWS_BUCKET_NAME:-sentra-dev-bucket}
+    volumes:
+      # Mount source code for hot reload during development
+      - ./:/home/appuser/app:cached
+      - ./private.key:/home/appuser/private.key:ro
+      - ./storage/logs:/home/appuser/storage/logs
+      # Mount go mod cache to speed up builds
+      - go_mod_cache:/go/pkg/mod
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+      - "2345:2345" # Delve debugger port
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # Development-friendly health check
+    healthcheck:
+      test: "curl -f http://localhost:${APP_PORT:-8080}/ || exit 1"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - sentra-dev-network
+    # Enable debugging
+    security_opt:
+      - "apparmor:unconfined"
+    cap_add:
+      - SYS_PTRACE
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  minio_dev_data:
+    driver: local
+  redis_insight_data:
+    driver: local
+  pgadmin_dev_data:
+    driver: local
+  go_mod_cache:
+    driver: local
+
+networks:
+  sentra-dev-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

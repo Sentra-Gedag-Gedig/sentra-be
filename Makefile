@@ -133,7 +133,7 @@ prod-test: prod-build ## Test production image locally
 	@echo "$(BLUE)🧪 Testing production image locally...$(NC)"
 	@docker run --rm -d --name sentra-test \
 		-p 8081:8080 \
-		-e DB_HOST=host.docker.internal \
+		-e DB_HOST=host.docker.internal:5432 \
 		-e REDIS_ADDRESS=host.docker.internal:6379 \
 		$(PROD_IMAGE_NAME)
 	@sleep 10

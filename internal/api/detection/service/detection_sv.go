@@ -3,6 +3,7 @@ package detectionService
 import (
 	"ProjectGolang/internal/api/detection"
 	"ProjectGolang/internal/entity"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"golang.org/x/net/context"
@@ -33,7 +34,8 @@ func (s *detectionService) ProcessQRISFrame(frame []byte) (*entity.QRISDetection
 	return result, nil
 }
 
-func (s *detectionService) ExtractAndSaveKTP(ctx context.Context, base64Image string) (*detection.KTP, error) {
+// Updated to handle both binary data and base64 string
+func (s *detectionService) ExtractAndSaveKTP(ctx context.Context, imageData interface{}) (*detection.KTP, error) {
 	prompt := `
 	Ekstrak semua informasi dari KTP Indonesia ini dan berikan hasilnya dalam format JSON.
 	Format output yang diinginkan:
@@ -58,6 +60,21 @@ func (s *detectionService) ExtractAndSaveKTP(ctx context.Context, base64Image st
 	Berikan HANYA respons JSON, tanpa teks tambahan apapun.
 	`
 
+	var base64Image string
+	var err error
+
+	// Handle different input types
+	switch v := imageData.(type) {
+	case string:
+		// Already base64 string
+		base64Image = v
+	case []byte:
+		// Binary data, convert to base64
+		base64Image = base64.StdEncoding.EncodeToString(v)
+	default:
+		return nil, errors.New("invalid image data type")
+	}
+
 	result, err := s.gemini.AnalyzeImage(ctx, base64Image, prompt)
 	if err != nil {
 		return nil, err
@@ -66,6 +83,13 @@ func (s *detectionService) ExtractAndSaveKTP(ctx context.Context, base64Image st
 	ktp, err := parseGeminiResponse(result)
 
 	return ktp, nil
+}
+
+// Updated method signature to accept binary data directly
+func (s *detectionService) ExtractAndSaveKTPFromBinary(ctx context.Context, binaryData []byte) (*detection.KTP, error) {
+	// Convert binary to base64
+	base64Image := base64.StdEncoding.EncodeToString(binaryData)
+	return s.ExtractAndSaveKTP(ctx, base64Image)
 }
 
 func parseGeminiResponse(response string) (*detection.KTP, error) {
@@ -91,7 +115,7 @@ func parseGeminiResponse(response string) (*detection.KTP, error) {
 	return &ktp, nil
 }
 
-func (s *detectionService) DetectMoney(ctx context.Context, base64Image string) (*detection.MoneyDetectionResponse, error) {
+func (s *detectionService) DetectMoney(ctx context.Context, imageData interface{}) (*detection.MoneyDetectionResponse, error) {
 	prompt := `
 	Identifikasi uang Rupiah pada gambar ini dan berikan hasilnya dalam format JSON.
 	
@@ -128,6 +152,21 @@ func (s *detectionService) DetectMoney(ctx context.Context, base64Image string) 
 	
 	Berikan HANYA respons JSON, tanpa teks tambahan apapun.
 	`
+
+	var base64Image string
+	var err error
+
+	// Handle different input types
+	switch v := imageData.(type) {
+	case string:
+		// Already base64 string
+		base64Image = v
+	case []byte:
+		// Binary data, convert to base64
+		base64Image = base64.StdEncoding.EncodeToString(v)
+	default:
+		return nil, errors.New("invalid image data type")
+	}
 
 	result, err := s.gemini.AnalyzeImage(ctx, base64Image, prompt)
 	if err != nil {

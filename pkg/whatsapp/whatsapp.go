@@ -33,19 +33,24 @@ func New() (IWhatsappSender, error) {
 	dsn := postgres.FormatDSN()
 
 	dbLog := waLog.Stdout("Database", "INFO", true)
-	container, err := sqlstore.New("postgres", dsn, dbLog)
+
+	// Tambahkan context di sini
+	ctx := context.Background()
+
+	container, err := sqlstore.New(ctx, "postgres", dsn, dbLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	deviceStore, err := container.GetFirstDevice()
+	// Tambahkan context di sini juga
+	deviceStore, err := container.GetFirstDevice(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device store: %w", err)
 	}
 
 	client := whatsmeow.NewClient(deviceStore, waLog.Stdout("Client", "INFO", true))
 
-	connected := make(chan bool)
+	connected := make(chan bool, 1)
 	client.AddEventHandler(func(evt interface{}) {
 		if _, ok := evt.(*events.Connected); ok {
 			connected <- true
@@ -53,7 +58,7 @@ func New() (IWhatsappSender, error) {
 	})
 
 	if client.Store.ID == nil {
-		qrChan, _ := client.GetQRChannel(context.Background())
+		qrChan, _ := client.GetQRChannel(ctx)
 		if err := client.Connect(); err != nil {
 			return nil, fmt.Errorf("failed to connect: %w", err)
 		}
@@ -82,6 +87,7 @@ func New() (IWhatsappSender, error) {
 		client: client,
 	}, nil
 }
+
 
 func (w *whatsappSender) SendMessage(ctx context.Context, phoneNumber, message string) error {
 	jid := types.NewJID(phoneNumber, types.DefaultUserServer)

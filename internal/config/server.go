@@ -244,7 +244,7 @@ func (s *Server) Run() error {
 	router := s.engine.Group("/api/v1")
 
 	corsMiddleware := cors.New(cors.Config{
-		AllowOrigins:     "https://sentra-web-pi.vercel.app, http://localhost:3000",
+		AllowOrigins:     "https://sentra-web-pi.vercel.app, http://localhost:3000, https://sentra-web-e8ma.vercel.app",
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Request-ID",
 		ExposeHeaders:    "X-Request-ID",

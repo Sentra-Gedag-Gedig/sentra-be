@@ -270,6 +270,34 @@ deploy: setup dev-test prod-build prod-test prod-push ## Full deployment pipelin
 	@echo "  3. Optional: Start monitoring:"
 	@echo "     $(BLUE)make monitor-start$(NC)"
 
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=231220
+DB_NAME=sentra_db
+DB_SSL_MODE=disable
+
+DB_URL=postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSL_MODE)
+
+MIGRATIONS_PATH=./database/migrations
+
+.PHONY: run
+run:
+	go run cmd/app/main.go
+
+.PHONY: migrate-up
+migrate-up:
+	migrate -path $(MIGRATIONS_PATH) -database "$(DB_URL)" -verbose up
+
+.PHONY: migrate-create
+migrate-create:
+	@read -p "Masukkan nama migrasi: " name; \
+	migrate create -ext sql -dir $(MIGRATIONS_PATH) -seq $$name
+
+.PHONY: migrate-down
+migrate-down:
+	migrate -path $(MIGRATIONS_PATH) -database "$(DB_URL)" -verbose down
+
 # =================
 # Version Commands
 # =================

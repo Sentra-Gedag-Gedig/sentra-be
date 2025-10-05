@@ -35,9 +35,12 @@ func (h *VoiceHandler) Start(srv fiber.Router) {
 	// All voice endpoints require authentication
 	voice.Use(h.middleware.NewTokenMiddleware)
 
-	// Voice command processing
+	// TAHAP 1: Command-based (strict format)
 	voice.Post("/command", h.ProcessVoiceCommand)
 	voice.Post("/confirm", h.ProcessConfirmation)
+
+	// TAHAP 2: GPT-based conversational (natural language)
+	voice.Post("/chat", h.ProcessChatCommand)
 
 	// Voice history and analytics
 	voice.Get("/history", h.GetVoiceHistory)

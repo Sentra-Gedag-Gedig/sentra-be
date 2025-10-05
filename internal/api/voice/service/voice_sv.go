@@ -278,6 +278,7 @@ func (s *voiceService) ProcessConfirmation(ctx context.Context, userID string, r
 	return response, nil
 }
 
+// UPDATE GetVoiceHistory method in voice_sv.go
 func (s *voiceService) GetVoiceHistory(ctx context.Context, userID string, page, limit int) ([]voice.VoiceCommandHistory, int, error) {
 	requestID := contextPkg.GetRequestID(ctx)
 
@@ -310,7 +311,7 @@ func (s *voiceService) GetVoiceHistory(ctx context.Context, userID string, page,
 
 	var history []voice.VoiceCommandHistory
 	for _, cmd := range commands {
-		// Generate presigned URL for audio if it exists
+		// Generate presigned URL for response audio if it exists
 		audioURL := cmd.AudioURL
 		if audioURL != "" {
 			presignedURL, err := s.s3Client.PresignUrl(audioURL)
@@ -319,10 +320,19 @@ func (s *voiceService) GetVoiceHistory(ctx context.Context, userID string, page,
 			}
 		}
 
+		// Also presign the input audio file URL
+		inputAudioURL := cmd.AudioFile
+		if inputAudioURL != "" {
+			presignedURL, err := s.s3Client.PresignUrl(inputAudioURL)
+			if err == nil {
+				inputAudioURL = presignedURL
+			}
+		}
+
 		history = append(history, voice.VoiceCommandHistory{
 			ID:         cmd.ID,
 			UserID:     cmd.UserID,
-			AudioFile:  cmd.AudioFile,
+			AudioFile:  inputAudioURL,
 			Transcript: cmd.Transcript,
 			Command:    cmd.Command,
 			Response:   cmd.Response,
@@ -536,124 +546,6 @@ func (s *voiceService) generateAnalytics(commands []entity.VoiceCommand) *voice.
 	}
 
 	return analytics
-}
-
-func (s *voiceService) saveAudioFile(audioFile *multipart.FileHeader) (string, error) {
-	// Generate unique filename
-	ext := filepath.Ext(audioFile.Filename)
-	filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
-	
-	// Create upload directory if not exists
-	if err := os.MkdirAll(s.config.UploadPath, 0755); err != nil {
-		return "", err
-	}
-	
-	// Full file path
-	filePath := filepath.Join(s.config.UploadPath, filename)
-	
-	// Open uploaded file
-	src, err := audioFile.Open()
-	if err != nil {
-		return "", err
-	}
-	defer src.Close()
-	
-	// Create destination file
-	dst, err := os.Create(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer dst.Close()
-	
-	// Copy file content
-	_, err = io.Copy(dst, src)
-	if err != nil {
-		return "", err
-	}
-	
-	return filename, nil
-}
-
-func (s *voiceService) transcribeAudio(filename string) (string, error) {
-	filePath := filepath.Join(s.config.UploadPath, filename)
-	
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	req := openai.AudioRequest{
-		Model:    openai.Whisper1,
-		FilePath: filePath,
-		Language: "id", // Indonesian language
-	}
-
-	client := openai.NewClient(s.config.OpenAIAPIKey)
-	resp, err := client.CreateTranscription(context.Background(), req)
-	if err != nil {
-		return "", err
-	}
-
-	return resp.Text, nil
-}
-
-func (s *voiceService) generateAudioResponse(text string) (string, error) {
-	url := "https://api.elevenlabs.io/v1/text-to-speech/" + s.config.ElevenLabsVoiceID
-
-	requestBody := map[string]interface{}{
-		"text": text,
-		"model_id": "eleven_multilingual_v2",
-		"voice_settings": map[string]interface{}{
-			"stability":        0.5,
-			"similarity_boost": 0.8,
-			"style":           0.0,
-			"use_speaker_boost": true,
-		},
-	}
-
-	jsonData, err := json.Marshal(requestBody)
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Accept", "audio/mpeg")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("xi-api-key", s.config.ElevenLabsAPIKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("ElevenLabs API error: %s", resp.Status)
-	}
-
-	// Save audio response to file
-	audioFilename := fmt.Sprintf("%s.mp3", uuid.New().String())
-	audioPath := filepath.Join(s.config.UploadPath, audioFilename)
-	
-	audioFile, err := os.Create(audioPath)
-	if err != nil {
-		return "", err
-	}
-	defer audioFile.Close()
-
-	_, err = io.Copy(audioFile, resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// Return URL path for serving
-	return fmt.Sprintf("/api/v1/voice/audio/%s", audioFilename), nil
 }
 
 func (s *voiceService) generateSuggestions(transcript string) []string {
@@ -935,21 +827,41 @@ func (s *voiceService) UpdatePageMapping(ctx context.Context, pageID string, map
 	return repo.Commit()
 }
 
+// REPLACE ServeAudioFile method
 func (s *voiceService) ServeAudioFile(ctx context.Context, filename string) ([]byte, error) {
 	// Security check
 	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		return nil, voice.ErrInvalidAudioFile
 	}
 
-	filePath := filepath.Join(s.config.UploadPath, filename)
-	
-	// Check if file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	// Get presigned URL from S3
+	s3URL := filename
+	if !strings.HasPrefix(filename, "http") {
+		// If filename is not a full URL, construct S3 URL
+		// You might need to adjust this based on your S3 bucket structure
+		s3URL = fmt.Sprintf("https://%s.s3.amazonaws.com/%s", 
+			os.Getenv("AWS_BUCKET_NAME"), 
+			filename)
+	}
+
+	presignedURL, err := s.s3Client.PresignUrl(s3URL)
+	if err != nil {
+		return nil, voice.ErrInvalidAudioFile
+	}
+
+	// Download file from S3
+	resp, err := http.Get(presignedURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download from S3: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
 		return nil, voice.ErrInvalidAudioFile
 	}
 
 	// Read and return file content
-	return os.ReadFile(filePath)
+	return io.ReadAll(resp.Body)
 }
 
 // Helper methods
@@ -1025,3 +937,143 @@ func (s *voiceService) getContextualSuggestions(context map[string]interface{}) 
 
 	return suggestions
 }
+
+// REPLACE the existing saveAudioFile method with this:
+func (s *voiceService) saveAudioFile(audioFile *multipart.FileHeader) (string, error) {
+	// Upload directly to S3
+	s3URL, err := s.s3Client.UploadFile(audioFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to upload audio to S3: %w", err)
+	}
+	
+	// Extract filename from S3 URL for reference
+	parts := strings.Split(s3URL, "/")
+	filename := parts[len(parts)-1]
+	
+	s.log.WithFields(logrus.Fields{
+		"filename": filename,
+		"s3_url":   s3URL,
+	}).Debug("Audio file uploaded to S3")
+	
+	return s3URL, nil
+}
+
+// UPDATE transcribeAudio to work with S3 URLs
+func (s *voiceService) transcribeAudio(s3URL string) (string, error) {
+	// Download file from S3 to temporary location for transcription
+	presignedURL, err := s.s3Client.PresignUrl(s3URL)
+	if err != nil {
+		return "", fmt.Errorf("failed to presign S3 URL: %w", err)
+	}
+
+	// Download file content
+	resp, err := http.Get(presignedURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to download audio from S3: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", "voice-*.mp3")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	// Copy S3 content to temp file
+	_, err = io.Copy(tmpFile, resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to write temp file: %w", err)
+	}
+
+	// Transcribe using OpenAI Whisper
+	file, err := os.Open(tmpFile.Name())
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	req := openai.AudioRequest{
+		Model:    openai.Whisper1,
+		FilePath: tmpFile.Name(),
+		Language: "id",
+	}
+
+	client := openai.NewClient(s.config.OpenAIAPIKey)
+	transcribeResp, err := client.CreateTranscription(context.Background(), req)
+	if err != nil {
+		return "", err
+	}
+
+	return transcribeResp.Text, nil
+}
+
+// UPDATE generateAudioResponse to save to S3
+func (s *voiceService) generateAudioResponse(text string) (string, error) {
+	// Call ElevenLabs API
+	url := "https://api.elevenlabs.io/v1/text-to-speech/" + s.config.ElevenLabsVoiceID
+
+	requestBody := map[string]interface{}{
+		"text":     text,
+		"model_id": "eleven_multilingual_v2",
+		"voice_settings": map[string]interface{}{
+			"stability":         0.5,
+			"similarity_boost":  0.8,
+			"style":             0.0,
+			"use_speaker_boost": true,
+		},
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", err
+	}
+
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", err
+	}
+
+	httpReq.Header.Set("Accept", "audio/mpeg")
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("xi-api-key", s.config.ElevenLabsAPIKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("ElevenLabs API error: %s - %s", resp.Status, string(bodyBytes))
+	}
+
+	// Read audio data into memory
+	audioData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read audio response: %w", err)
+	}
+
+	// Generate unique filename
+	audioFilename := fmt.Sprintf("tts-%s.mp3", uuid.New().String())
+
+	// Upload directly to S3 using the new method
+	s3URL, err := s.s3Client.UploadFileFromBytes(audioFilename, audioData)
+	if err != nil {
+		return "", fmt.Errorf("failed to upload TTS audio to S3: %w", err)
+	}
+
+	s.log.WithFields(logrus.Fields{
+		"s3_url":   s3URL,
+		"filename": audioFilename,
+		"size":     len(audioData),
+	}).Info("TTS audio uploaded to S3 successfully")
+
+	return s3URL, nil
+}
+
+// Remove the uploadFileToS3 helper method - tidak diperlukan lagi
+

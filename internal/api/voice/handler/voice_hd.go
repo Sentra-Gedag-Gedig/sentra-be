@@ -15,6 +15,54 @@ import (
 	"golang.org/x/net/context"
 )
 
+
+func (h *VoiceHandler) ProcessChatCommand(ctx *fiber.Ctx) error {
+	requestID := h.middleware.GetRequestID(ctx)
+	c, cancel := context.WithTimeout(contextPkg.FromFiberCtx(ctx), 30*time.Second)
+	defer cancel()
+
+	errHandler := handlerUtil.New(h.log)
+
+	h.log.WithFields(log.Fields{
+		"request_id": requestID,
+		"path":       ctx.Path(),
+	}).Debug("Processing chat voice command request (Tahap 2)")
+
+	// Get authenticated user
+	userData, err := jwtPkg.GetUserLoginData(ctx)
+	if err != nil {
+		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
+	}
+
+	// Get audio file
+	audioFile, err := ctx.FormFile("audio")
+	if err != nil {
+		return errHandler.HandleValidationError(ctx, requestID,
+			errors.New("audio file is required"), ctx.Path())
+	}
+
+	// Get optional context
+	var contextData map[string]interface{}
+
+	req := voice.ProcessVoiceRequest{
+		AudioFile: audioFile,
+		Context:   contextData,
+	}
+
+	// Process with GPT chat
+	response, err := h.voiceService.ProcessChatCommand(c, userData.ID, req)
+	if err != nil {
+		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "process_chat_command")
+	}
+
+	select {
+	case <-c.Done():
+		return errHandler.HandleRequestTimeout(ctx)
+	default:
+		return errHandler.HandleSuccess(ctx, fiber.StatusOK, response)
+	}
+}
+
 func (h *VoiceHandler) ProcessVoiceCommand(ctx *fiber.Ctx) error {
 	requestID := h.middleware.GetRequestID(ctx)
 	c, cancel := context.WithTimeout(contextPkg.FromFiberCtx(ctx), 30*time.Second)
@@ -381,12 +429,13 @@ func (h *VoiceHandler) ServeAudioFile(ctx *fiber.Ctx) error {
 			errors.New("filename is required"), ctx.Path())
 	}
 
-	// Security check for path traversal
+	// Security check
 	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		return errHandler.HandleValidationError(ctx, requestID,
 			errors.New("invalid filename"), ctx.Path())
 	}
 
+	// Get audio data from S3
 	audioData, err := h.voiceService.ServeAudioFile(c, filename)
 	if err != nil {
 		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "serve_audio_file")

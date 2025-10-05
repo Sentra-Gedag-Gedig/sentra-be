@@ -1,18 +1,25 @@
 package voiceService
 
 import (
+	budgetService "ProjectGolang/internal/api/budget_manager/service"
+	chatGPT "ProjectGolang/pkg/openai"
 	"ProjectGolang/internal/api/voice"
 	voiceRepository "ProjectGolang/internal/api/voice/repository"
 	"ProjectGolang/pkg/nlp"
 	"ProjectGolang/pkg/s3"
 	"ProjectGolang/pkg/utils"
 	"context"
+
 	"github.com/sirupsen/logrus"
 )
 
 type IVoiceService interface {
+	// Tahap 1: Command-based
 	ProcessVoiceCommand(ctx context.Context, userID string, req voice.ProcessVoiceRequest) (*voice.VoiceResponse, error)
 	ProcessConfirmation(ctx context.Context, userID string, req voice.ConfirmationRequest) (*voice.VoiceResponse, error)
+	
+	// Tahap 2: GPT Chat
+	ProcessChatCommand(ctx context.Context, userID string, req voice.ProcessVoiceRequest) (*voice.VoiceResponse, error)
 	GetVoiceHistory(ctx context.Context, userID string, page, limit int) ([]voice.VoiceCommandHistory, int, error)
 	GetVoiceAnalytics(ctx context.Context, userID string) (*voice.VoiceAnalytics, error)
 	GetSmartSuggestions(ctx context.Context, userID string) (*voice.SuggestionsResponse, error)
@@ -30,13 +37,14 @@ type voiceService struct {
 	utils        utils.IUtils
 	nlpProcessor nlp.INLPProcessor
 	config       *VoiceConfig
+	budgetService budgetService.IBudgetService
+	chatGPT chatGPT.IChatGPT
 }
 
 type VoiceConfig struct {
 	ElevenLabsAPIKey  string   `json:"eleven_labs_api_key"`
 	ElevenLabsVoiceID string   `json:"eleven_labs_voice_id"`
 	OpenAIAPIKey      string   `json:"openai_api_key"`
-	UploadPath        string   `json:"upload_path"`
 	MaxFileSize       int64    `json:"max_file_size"`
 	AllowedFormats    []string `json:"allowed_formats"`
 	SessionTimeout    int64    `json:"session_timeout_hours"`
@@ -52,6 +60,8 @@ func NewVoiceService(
 	utils utils.IUtils,
 	nlpProcessor nlp.INLPProcessor,
 	config *VoiceConfig,
+	budgetService budgetService.IBudgetService,
+	chatGPT chatGPT.IChatGPT,
 ) IVoiceService {
 	return &voiceService{
 		log:          log,
@@ -60,5 +70,7 @@ func NewVoiceService(
 		utils:        utils,
 		nlpProcessor: nlpProcessor,
 		config:       config,
+		budgetService: budgetService,
+		chatGPT: chatGPT,
 	}
 }

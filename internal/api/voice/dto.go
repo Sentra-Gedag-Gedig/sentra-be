@@ -12,6 +12,7 @@ type ProcessVoiceRequest struct {
 
 type VoiceResponse struct {
 	Text         string                 `json:"text"`
+	Transcript   string                 `json:"transcript,omitempty"` // ← Field baru
 	AudioURL     string                 `json:"audio_url,omitempty"`
 	Action       string                 `json:"action"`
 	Target       string                 `json:"target,omitempty"`
@@ -20,7 +21,6 @@ type VoiceResponse struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 	SessionState *SessionState          `json:"session_state,omitempty"`
 }
-
 type SessionState struct {
 	PendingConfirmation bool                   `json:"pending_confirmation"`
 	PendingPageID       string                 `json:"pending_page_id,omitempty"`

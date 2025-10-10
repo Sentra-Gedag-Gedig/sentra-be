@@ -76,11 +76,11 @@ func (s *voiceService) ProcessChatCommand(
 	
 	if txIntent != nil && txIntent.IsTransaction && txIntent.Confidence > 0.7 {
 		s.log.WithFields(logrus.Fields{
-			"request_id":   requestID,
+			"request_id":     requestID,
 			"is_transaction": txIntent.IsTransaction,
-			"type":         txIntent.Type,
-			"amount":       txIntent.Amount,
-			"confidence":   txIntent.Confidence,
+			"type":           txIntent.Type,
+			"amount":         txIntent.Amount,
+			"confidence":     txIntent.Confidence,
 		}).Info("Transaction detected by GPT")
 
 		// Process as transaction
@@ -88,77 +88,22 @@ func (s *voiceService) ProcessChatCommand(
 		if err != nil {
 			return nil, err
 		}
+		// Tambahkan transcript ke response transaction
+		response.Transcript = transcript // ← Tambahkan ini
 	} else {
 		// Regular conversation response
 		response = &voice.VoiceResponse{
 			Text:       gptResponse,
+			Transcript: transcript, // ← Tambahkan ini
 			Action:     "chat",
 			Success:    true,
 			Confidence: 0.9,
 		}
 	}
 
-	// ✅ CRITICAL FIX: Generate TTS audio for BOTH transaction and chat responses
-	s.log.WithFields(logrus.Fields{
-		"request_id": requestID,
-		"text":       response.Text,
-	}).Debug("Generating TTS audio response")
-
-	audioURL, err := s.generateAudioResponse(response.Text)
-	if err != nil {
-		s.log.WithFields(logrus.Fields{
-			"request_id": requestID,
-			"error":      err.Error(),
-		}).Warn("Failed to generate TTS audio, continuing without audio")
-	} else {
-		response.AudioURL = audioURL
-		s.log.WithFields(logrus.Fields{
-			"request_id": requestID,
-			"audio_url":  audioURL,
-		}).Info("TTS audio generated and uploaded to S3")
-	}
-
-	// Update conversation history in session
-	s.updateConversationHistory(session, transcript, gptResponse)
-
-	// Save to database
-	commandID, _ := s.utils.NewULIDFromTimestamp(time.Now())
-	now := time.Now()
-	
-	voiceCommand := entity.VoiceCommand{
-		ID:         commandID,
-		UserID:     userID,
-		AudioFile:  audioFilename,
-		Transcript: transcript,
-		Command:    "chat",
-		Response:   response.Text, // Save actual response text
-		AudioURL:   response.AudioURL, // Save TTS audio URL
-		Confidence: response.Confidence,
-		Metadata: map[string]interface{}{
-			"mode":           "gpt_chat",
-			"session_id":     session.ID,
-			"is_transaction": txIntent != nil && txIntent.IsTransaction,
-		},
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	if err := repo.VoiceCommands.CreateVoiceCommand(ctx, voiceCommand); err != nil {
-		s.log.WithFields(logrus.Fields{
-			"request_id": requestID,
-			"error":      err.Error(),
-		}).Warn("Failed to save chat command")
-	}
-
-	if err := repo.Sessions.UpdateSession(ctx, *session); err != nil {
-		s.log.WithFields(logrus.Fields{
-			"request_id": requestID,
-			"error":      err.Error(),
-		}).Warn("Failed to update session")
-	}
-
-	if err := repo.Commit(); err != nil {
-		return nil, voice.ErrVoiceCommandFailed
+	// Sebelum return, pastikan transcript selalu ada
+	if response.Transcript == "" {
+		response.Transcript = transcript
 	}
 
 	return response, nil

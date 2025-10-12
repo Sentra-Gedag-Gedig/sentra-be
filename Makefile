@@ -291,8 +291,12 @@ migrate-up:
 
 .PHONY: migrate-create
 migrate-create:
-	@read -p "Masukkan nama migrasi: " name; \
-	migrate create -ext sql -dir $(MIGRATIONS_PATH) -seq $$name
+	@if [ -z "$(name)" ]; then \
+	  read -p "Masukkan nama migrasi: " name; \
+	else \
+	  name="$(name)"; \
+	fi; \
+	migrate create -ext sql -dir $(MIGRATIONS_PATH) -format 20060102150405 $$name
 
 .PHONY: migrate-down
 migrate-down:

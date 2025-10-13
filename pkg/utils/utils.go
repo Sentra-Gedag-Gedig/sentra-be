@@ -73,18 +73,18 @@ func (u *utils) ConvertFileToBase64(file multipart.File) (string, error) {
 }
 
 func (u *utils) OptimizeImageForOCR(imageData []byte, maxWidth, maxHeight int, quality int) ([]byte, error) {
-	// Decode image
+	
 	img, format, err := image.Decode(bytes.NewReader(imageData))
 	if err != nil {
 		return nil, err
 	}
 
-	// Get original dimensions
+	
 	bounds := img.Bounds()
 	origWidth := bounds.Dx()
 	origHeight := bounds.Dy()
 
-	// Calculate new dimensions if needed
+	
 	newWidth, newHeight := origWidth, origHeight
 	if origWidth > maxWidth || origHeight > maxHeight {
 		ratio := float64(origWidth) / float64(origHeight)
@@ -98,14 +98,14 @@ func (u *utils) OptimizeImageForOCR(imageData []byte, maxWidth, maxHeight int, q
 		}
 	}
 
-	// Only resize if dimensions changed
+	
 	if newWidth != origWidth || newHeight != origHeight {
-		// Use a simple resize (you might want to use a proper image library)
-		// For now, we'll just return original if resize is needed
-		// You should implement proper image resizing here
+		
+		
+		
 	}
 
-	// Re-encode with compression
+	
 	var buf bytes.Buffer
 	switch format {
 	case "jpeg":
@@ -113,7 +113,7 @@ func (u *utils) OptimizeImageForOCR(imageData []byte, maxWidth, maxHeight int, q
 	case "png":
 		err = png.Encode(&buf, img)
 	default:
-		// Convert to JPEG for better compression
+		
 		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality})
 	}
 

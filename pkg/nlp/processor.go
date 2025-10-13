@@ -1,4 +1,4 @@
-// pkg/nlp/processor.go
+
 package nlp
 
 import (
@@ -18,7 +18,7 @@ type NLPProcessor struct {
 }
 
 func NewProcessor(config interface{}) INLPProcessor {
-	// Indonesian and English stop words
+	
 	stopWords := map[string]bool{
 		"saya": true, "ke": true, "di": true, "dan": true, "atau": true,
 		"untuk": true, "dari": true, "dengan": true, "pada": true, "dalam": true,
@@ -30,7 +30,7 @@ func NewProcessor(config interface{}) INLPProcessor {
 		"page": true, "halaman": true, "menu": true,
 	}
 
-	// Initialize with default page mappings
+	
 	defaultMappings := getDefaultPageMappings()
 
 	return &NLPProcessor{
@@ -42,13 +42,13 @@ func NewProcessor(config interface{}) INLPProcessor {
 func (nlp *NLPProcessor) ProcessCommand(text string) (*IntentResult, error) {
 	startTime := time.Now()
 	
-	// Normalize and clean text
+	
 	cleanText := nlp.cleanText(text)
 	
-	// Extract meaningful tokens
+	
 	tokens := nlp.extractTokens(cleanText)
 	
-	// Find best matching page
+	
 	matches := nlp.findBestMatches(tokens, cleanText)
 	
 	processingTime := time.Since(startTime)
@@ -61,7 +61,7 @@ func (nlp *NLPProcessor) ProcessCommand(text string) (*IntentResult, error) {
 		}, nil
 	}
 
-	// Sort by confidence and return best match
+	
 	sort.Slice(matches, func(i, j int) bool {
 		return matches[i].Confidence > matches[j].Confidence
 	})
@@ -78,7 +78,7 @@ func (nlp *NLPProcessor) findBestMatches(tokens []string, fullText string) []*In
 	for pageID, mapping := range nlp.pageMappings {
 		confidence := nlp.calculatePageConfidence(tokens, fullText, mapping)
 		
-		if confidence.Confidence > 0.2 { // Lower threshold for more permissive matching
+		if confidence.Confidence > 0.2 { 
 			result := &IntentResult{
 				Intent:          "navigate",
 				Page:            pageID,
@@ -100,7 +100,7 @@ func (nlp *NLPProcessor) calculatePageConfidence(tokens []string, fullText strin
 	totalScore := 0.0
 	maxPossibleScore := 0.0
 
-	// Check exact keyword matches
+	
 	for _, keyword := range mapping.Keywords {
 		for _, token := range tokens {
 			if strings.EqualFold(token, keyword) {
@@ -115,7 +115,7 @@ func (nlp *NLPProcessor) calculatePageConfidence(tokens []string, fullText strin
 		maxPossibleScore += 1.0
 	}
 
-	// Check synonym matches (full phrases)
+	
 	for _, synonym := range mapping.Synonyms {
 		similarity := nlp.calculateSimilarity(fullText, synonym)
 		if similarity > 0.6 {
@@ -124,18 +124,18 @@ func (nlp *NLPProcessor) calculatePageConfidence(tokens []string, fullText strin
 				Score:   similarity,
 				Type:    "synonym",
 			})
-			totalScore += similarity * 1.2 // Boost for phrase matches
+			totalScore += similarity * 1.2 
 		}
 	}
 
-	// Check fuzzy matches for keywords
+	
 	for _, keyword := range mapping.Keywords {
 		for _, token := range tokens {
 			similarity := nlp.calculateSimilarity(token, keyword)
-			if similarity > 0.5 && similarity < 1.0 { // Fuzzy but not exact
+			if similarity > 0.5 && similarity < 1.0 { 
 				matches = append(matches, MatchResult{
 					Keyword: keyword,
-					Score:   similarity * 0.7, // Penalty for fuzzy match
+					Score:   similarity * 0.7, 
 					Type:    "fuzzy",
 				})
 				totalScore += similarity * 0.7
@@ -143,14 +143,14 @@ func (nlp *NLPProcessor) calculatePageConfidence(tokens []string, fullText strin
 		}
 	}
 
-	// Boost score for category-related words
+	
 	categoryBonus := nlp.getCategoryBonus(tokens, mapping.Category)
 	totalScore += categoryBonus
 
-	// Calculate final confidence
+	
 	confidence := totalScore / math.Max(maxPossibleScore, 1.0)
 	if len(matches) > 1 {
-		confidence *= 1.1 // Boost for multiple matches
+		confidence *= 1.1 
 	}
 	confidence = math.Min(confidence, 1.0)
 
@@ -161,16 +161,16 @@ func (nlp *NLPProcessor) calculatePageConfidence(tokens []string, fullText strin
 }
 
 func (nlp *NLPProcessor) calculateSimilarity(text1, text2 string) float64 {
-	// Normalize both texts
+	
 	norm1 := nlp.cleanText(text1)
 	norm2 := nlp.cleanText(text2)
 
-	// If exact match after normalization
+	
 	if norm1 == norm2 {
 		return 1.0
 	}
 
-	// Check if one contains the other
+	
 	if strings.Contains(norm1, norm2) || strings.Contains(norm2, norm1) {
 		shorter := norm1
 		longer := norm2
@@ -181,7 +181,7 @@ func (nlp *NLPProcessor) calculateSimilarity(text1, text2 string) float64 {
 		return float64(len(shorter)) / float64(len(longer))
 	}
 
-	// Use Levenshtein distance for similarity
+	
 	distance := nlp.levenshteinDistance(norm1, norm2)
 	maxLen := math.Max(float64(len(norm1)), float64(len(norm2)))
 	
@@ -218,9 +218,9 @@ func (nlp *NLPProcessor) levenshteinDistance(s1, s2 string) int {
 			}
 
 			matrix[i][j] = min(
-				matrix[i-1][j]+1,      // deletion
-				matrix[i][j-1]+1,      // insertion
-				matrix[i-1][j-1]+cost, // substitution
+				matrix[i-1][j]+1,      
+				matrix[i][j-1]+1,      
+				matrix[i-1][j-1]+cost, 
 			)
 		}
 	}
@@ -261,18 +261,18 @@ func (nlp *NLPProcessor) getCategoryBonus(tokens []string, category string) floa
 		}
 	}
 
-	return math.Min(bonus, 0.3) // Max bonus 0.3
+	return math.Min(bonus, 0.3) 
 }
 
 func (nlp *NLPProcessor) cleanText(text string) string {
-	// Convert to lowercase
+	
 	text = strings.ToLower(text)
 	
-	// Remove diacritics
+	
 	t := transform.Chain(norm.NFD, transform.RemoveFunc(isMn), norm.NFC)
 	result, _, _ := transform.String(t, text)
 	
-	// Remove punctuation and extra spaces
+	
 	result = strings.Map(func(r rune) rune {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) {
 			return r
@@ -280,13 +280,13 @@ func (nlp *NLPProcessor) cleanText(text string) string {
 		return ' '
 	}, result)
 	
-	// Clean up spaces
+	
 	words := strings.Fields(result)
 	return strings.Join(words, " ")
 }
 
 func isMn(r rune) bool {
-	return unicode.Is(unicode.Mn, r) // Nonspacing marks
+	return unicode.Is(unicode.Mn, r) 
 }
 
 func (nlp *NLPProcessor) extractTokens(text string) []string {
@@ -331,13 +331,13 @@ func (nlp *NLPProcessor) GenerateResponseText(result *IntentResult) string {
 	}
 }
 
-// Helper types
+
 type confidenceResult struct {
 	Confidence float64
 	Matches    []MatchResult
 }
 
-// Default page mappings
+
 func getDefaultPageMappings() map[string]PageMappingData {
 	return map[string]PageMappingData{
 		"home": {

@@ -39,7 +39,7 @@ type VoiceCommandDB struct {
 	UpdatedAt  time.Time       `db:"updated_at"`
 }
 
-// Voice Commands Repository Implementation
+
 func (r *voiceRepository) CreateVoiceCommand(ctx context.Context, cmd entity.VoiceCommand) error {
 	requestID := contextPkg.GetRequestID(ctx)
 	
@@ -130,7 +130,7 @@ func (r *voiceRepository) GetVoiceCommandsByUserID(ctx context.Context, userID s
 	var commandsList []VoiceCommandDB
 	var total int
 
-	// Count total
+	
 	countArgsKV := map[string]interface{}{
 		"user_id": userID,
 	}
@@ -154,7 +154,7 @@ func (r *voiceRepository) GetVoiceCommandsByUserID(ctx context.Context, userID s
 		return nil, 0, err
 	}
 
-	// Get commands
+	
 	argsKV := map[string]interface{}{
 		"user_id": userID,
 		"limit":   limit,

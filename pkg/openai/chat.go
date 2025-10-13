@@ -38,11 +38,11 @@ type MultiIntentResult struct {
 }
 
 type Intent struct {
-	Type       string                 `json:"type"` // "navigation", "transaction", "query"
+	Type       string                 `json:"type"` 
 	Action     string                 `json:"action,omitempty"`
 	Data       map[string]interface{} `json:"data,omitempty"`
 	Confidence float64                `json:"confidence"`
-	Order      int                    `json:"order"` // execution order for multi-intent
+	Order      int                    `json:"order"` 
 }
 
 type PageInfo struct {
@@ -223,90 +223,217 @@ INTENT TYPES:
 1. navigation - User wants to go to a page
 2. transaction - User wants to record income/expense
 3. query - General question or conversation
+4. delete_transaction - User wants to delete transaction(s) by AMOUNT and optional DESCRIPTION
+5. logout - User wants to logout (ALWAYS needs confirmation)
 
-RULES:
-- Return ONLY valid JSON
-- Detect multiple intents if present
-- Order intents by execution priority
-- Use fuzzy matching for page names
-- If page doesn't exist, suggest closest match
+TRANSACTION DETECTION RULES:
+**INCOME keywords**: pemasukan, terima, dapat, gaji, bonus, pendapatan, masuk, diterima
+**EXPENSE keywords**: pengeluaran, beli, bayar, belanja, keluar, keluarkan, catat, habis, spent
+
+**Amount patterns**:
+- "Rp200.000" / "Rp 200.000" / "Rp200000"
+- "200 ribu" / "200ribu"
+- "200rb" / "200k"
+- "dua ratus ribu"
+
+**Category inference**:
+- Starbucks, kopi, cafe → "makanan"
+- Grab, Gojek, bensin → "transportasi"
+- baju, sepatu → "pakaian"
+- obat, dokter → "kesehatan"
+- If unclear → "lainnya"
+
+TRANSACTION DATA FIELDS:
+- type: "income" or "expense" (REQUIRED)
+- amount: numeric value in IDR (REQUIRED)
+- description: what the transaction is about (REQUIRED)
+- suggested_category: best matching category from valid list
+
+VALID CATEGORIES:
+**Income**: gaji, bonus, investasi, part time, lainnya
+**Expense**: makanan, sehari-hari, transportasi, sosial, perumahan, hadiah, komunikasi, pakaian, hiburan, tampilan, kesehatan, pajak, pendidikan, investasi, peliharaan, liburan, lainnya
 
 RESPONSE FORMAT:
 {
   "intents": [
     {
       "type": "transaction",
-      "action": "create_expense",
+      "action": "create_transaction",
       "data": {
-        "amount": 50000,
-        "description": "makan siang",
-        "category": "makanan"
+        "type": "expense",
+        "amount": 200000,
+        "description": "beli kopi di Starbucks",
+        "suggested_category": "makanan"
       },
       "confidence": 0.95,
       "order": 1
-    },
-    {
-      "type": "navigation",
-      "action": "navigate",
-      "data": {
-        "page_id": "profiles",
-        "url": "/profiles",
-        "display_name": "Profil"
-      },
-      "confidence": 0.9,
-      "order": 2
     }
   ],
-  "confidence": 0.92,
-  "needs_clarification": false,
-  "clarification_question": ""
+  "confidence": 0.95,
+  "needs_clarification": false
 }
 
-NAVIGATION DATA FIELDS:
-- page_id: exact page_id from available pages
-- url: exact URL path
-- display_name: user-friendly name
-- matched_keyword: which keyword matched (optional)
+TRANSACTION EXAMPLES:
 
-TRANSACTION DATA FIELDS:
-- amount: numeric value in IDR
-- description: what the transaction is for
-- category: one of: makanan, transportasi, belanja, kesehatan, hiburan, gaji, bonus, investasi
-- type: "income" or "expense"
-
-EXAMPLES:
-
-Input: "catat pengeluaran makan 50 ribu lalu ke profil"
+Input: "Tolong dong, catat pengeluaran saya sebesar Rp200.000 di Starbucks."
 Output: {
-  "intents": [
-    {"type":"transaction","action":"create_expense","data":{"amount":50000,"description":"makan","category":"makanan","type":"expense"},"confidence":0.95,"order":1},
-    {"type":"navigation","action":"navigate","data":{"page_id":"profiles","url":"/profiles","display_name":"Profil"},"confidence":0.9,"order":2}
-  ],
-  "confidence":0.92,
+  "intents":[{
+    "type":"transaction",
+    "action":"create_transaction",
+    "data":{
+      "type":"expense",
+      "amount":200000,
+      "description":"beli kopi di Starbucks",
+      "suggested_category":"makanan"
+    },
+    "confidence":0.95,
+    "order":1
+  }],
+  "confidence":0.95,
   "needs_clarification":false
 }
 
-Input: "pindah ke beranda"
+Input: "Catat pengeluaran 50 ribu untuk beli nasi goreng"
 Output: {
-  "intents":[{"type":"navigation","action":"navigate","data":{"page_id":"home","url":"/home","display_name":"Beranda"},"confidence":0.98,"order":1}],
+  "intents":[{
+    "type":"transaction",
+    "action":"create_transaction",
+    "data":{
+      "type":"expense",
+      "amount":50000,
+      "description":"beli nasi goreng",
+      "suggested_category":"makanan"
+    },
+    "confidence":0.98,
+    "order":1
+  }],
   "confidence":0.98,
   "needs_clarification":false
 }
 
-Input: "ke halaman yang ada qr nya"
+Input: "Tadi saya belanja di Indomaret 100 ribu"
 Output: {
-  "intents":[{"type":"navigation","action":"navigate","data":{"page_id":"qr","url":"/qr","display_name":"QR Code"},"confidence":0.85,"order":1}],
-  "confidence":0.85,
+  "intents":[{
+    "type":"transaction",
+    "action":"create_transaction",
+    "data":{
+      "type":"expense",
+      "amount":100000,
+      "description":"belanja di Indomaret",
+      "suggested_category":"sehari-hari"
+    },
+    "confidence":0.92,
+    "order":1
+  }],
+  "confidence":0.92,
   "needs_clarification":false
 }
 
-Input: "buka halaman xyz"
+Input: "Terima gaji 5 juta"
 Output: {
-  "intents":[],
-  "confidence":0.3,
-  "needs_clarification":true,
-  "clarification_question":"Maaf, halaman 'xyz' tidak ditemukan. Apakah maksud Anda: Beranda, Profil, atau Sentra Pay?"
-}`, string(pagesJSON))
+  "intents":[{
+    "type":"transaction",
+    "action":"create_transaction",
+    "data":{
+      "type":"income",
+      "amount":5000000,
+      "description":"gaji bulanan",
+      "suggested_category":"gaji"
+    },
+    "confidence":0.99,
+    "order":1
+  }],
+  "confidence":0.99,
+  "needs_clarification":false
+}
+
+Input: "Bayar Grab 25 ribu"
+Output: {
+  "intents":[{
+    "type":"transaction",
+    "action":"create_transaction",
+    "data":{
+      "type":"expense",
+      "amount":25000,
+      "description":"bayar Grab",
+      "suggested_category":"transportasi"
+    },
+    "confidence":0.97,
+    "order":1
+  }],
+  "confidence":0.97,
+  "needs_clarification":false
+}
+
+DELETE TRANSACTION EXAMPLES:
+
+Input: "Hapus transaksi 15 ribu"
+Output: {
+  "intents":[{
+    "type":"delete_transaction",
+    "action":"delete",
+    "data":{
+      "amount":15000
+    },
+    "confidence":0.95,
+    "order":1
+  }],
+  "confidence":0.95,
+  "needs_clarification":false
+}
+
+Input: "Hapus transaksi 50 ribu beli kopi"
+Output: {
+  "intents":[{
+    "type":"delete_transaction",
+    "action":"delete",
+    "data":{
+      "amount":50000,
+      "description":"kopi"
+    },
+    "confidence":0.95,
+    "order":1
+  }],
+  "confidence":0.95,
+  "needs_clarification":false
+}
+
+NAVIGATION EXAMPLES:
+
+Input: "Buka Profil"
+Output: {
+  "intents":[{"type":"navigation","action":"navigate","data":{"page_id":"profiles","url":"/profiles","display_name":"Profil"},"confidence":0.98,"order":1}],
+  "confidence":0.98,
+  "needs_clarification":false
+}
+
+Input: "Buka Deteksi"
+Output: {
+  "intents":[{"type":"navigation","action":"navigate","data":{"page_id":"money-detection","url":"/deteksi/money-detection","display_name":"Deteksi Uang"},"confidence":0.95,"order":1}],
+  "confidence":0.95,
+  "needs_clarification":false
+}
+
+LOGOUT EXAMPLES:
+
+Input: "Logout"
+Output: {
+  "intents":[{"type":"logout","action":"request_logout","data":{"page_id":"logout","url":"/logout","display_name":"Logout"},"confidence":0.99,"order":1}],
+  "confidence":0.99,
+  "needs_clarification":false
+}
+
+IMPORTANT RULES:
+1. ALWAYS detect "catat pengeluaran X di Y" as transaction
+2. ALWAYS extract amount even with "Rp" prefix
+3. ALWAYS infer category based on description keywords
+4. If user says "pengeluaran" → type is "expense"
+5. If user says "pemasukan"/"terima"/"dapat" → type is "income"
+6. Return JSON ONLY, no other text
+
+CLARIFICATION NEEDED ONLY IF:
+- Amount is completely unclear or missing
+- User says something ambiguous like "catat transaksi" without details`, string(pagesJSON))
 
 	messages := []openai.ChatCompletionMessage{
 		{
@@ -324,7 +451,7 @@ Output: {
 		openai.ChatCompletionRequest{
 			Model:       c.model,
 			Messages:    messages,
-			Temperature: 0.3,
+			Temperature: 0.3, // Lebih rendah untuk lebih konsisten
 			MaxTokens:   500,
 			ResponseFormat: &openai.ChatCompletionResponseFormat{
 				Type: openai.ChatCompletionResponseFormatTypeJSONObject,
@@ -342,8 +469,6 @@ Output: {
 
 	var result MultiIntentResult
 	responseContent := resp.Choices[0].Message.Content
-	
-	// Clean response if needed
 	responseContent = strings.TrimSpace(responseContent)
 	
 	if err := json.Unmarshal([]byte(responseContent), &result); err != nil {

@@ -36,7 +36,7 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 	}
 	defer repo.Rollback()
 
-	// Validate audio file
+	
 	if err := s.validateAudioFile(req.AudioFile); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -45,7 +45,7 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 		return nil, err
 	}
 
-	// Get or create session
+	
 	session, err := s.getOrCreateSession(ctx, repo, userID)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -55,7 +55,7 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 		return nil, err
 	}
 
-	// Save and process audio file
+	
 	audioFilename, err := s.saveAudioFile(req.AudioFile)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -65,7 +65,7 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 		return nil, err
 	}
 
-	// Transcribe audio using OpenAI Whisper
+	
 	transcript, err := s.transcribeAudio(audioFilename)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -75,7 +75,7 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 		return nil, voice.ErrTranscriptionFailed
 	}
 
-	// Process with NLP
+	
 	nlpResult, err := s.nlpProcessor.ProcessCommand(transcript)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -85,10 +85,10 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 		return nil, voice.ErrNLPProcessingFailed
 	}
 
-	// Handle based on confidence and session state
+	
 	response := s.handleIntentResult(ctx, nlpResult, transcript, session)
 
-	// Generate audio response
+	
 	audioURL, err := s.generateAudioResponse(response.Text)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -99,7 +99,7 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 		response.AudioURL = audioURL
 	}
 
-	// Save voice command to database
+	
 	commandID, err := s.utils.NewULIDFromTimestamp(time.Now())
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -136,7 +136,7 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 		return nil, voice.ErrVoiceCommandFailed
 	}
 
-	// Update session state
+	
 	s.updateSessionFromResponse(session, response)
 	if err := repo.Sessions.UpdateSession(ctx, *session); err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -153,7 +153,7 @@ func (s *voiceService) ProcessVoiceCommand(ctx context.Context, userID string, r
 		return nil, voice.ErrVoiceCommandFailed
 	}
 
-	// Set session state in response
+	
 	response.SessionState = &voice.SessionState{
 		PendingConfirmation: session.PendingConfirmation,
 		PendingPageID:       session.PendingPageID,
@@ -176,7 +176,7 @@ func (s *voiceService) ProcessConfirmation(ctx context.Context, userID string, r
 	}
 	defer repo.Rollback()
 
-	// Get session
+	
 	session, err := repo.Sessions.GetSessionByUserID(ctx, userID)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -190,7 +190,7 @@ func (s *voiceService) ProcessConfirmation(ctx context.Context, userID string, r
 		return nil, voice.ErrInvalidSession
 	}
 
-	// Validate and process confirmation audio
+	
 	if err := s.validateAudioFile(req.AudioFile); err != nil {
 		return nil, err
 	}
@@ -205,13 +205,13 @@ func (s *voiceService) ProcessConfirmation(ctx context.Context, userID string, r
 		return nil, voice.ErrTranscriptionFailed
 	}
 
-	// Check if it's a confirmation
+	
 	isConfirmed := s.isConfirmation(transcript)
 	
 	var response *voice.VoiceResponse
 
 	if isConfirmed {
-		// Get page mapping for confirmed page
+		
 		pageMapping, err := repo.PageMappings.GetPageMappingByID(ctx, session.PendingPageID)
 		if err != nil {
 			s.log.WithFields(logrus.Fields{
@@ -231,7 +231,7 @@ func (s *voiceService) ProcessConfirmation(ctx context.Context, userID string, r
 			Confidence: 1.0,
 		}
 
-		// Clear pending state
+		
 		session.PendingConfirmation = false
 		session.PendingPageID = ""
 	} else {
@@ -242,18 +242,18 @@ func (s *voiceService) ProcessConfirmation(ctx context.Context, userID string, r
 			Success: false,
 		}
 
-		// Clear pending state
+		
 		session.PendingConfirmation = false
 		session.PendingPageID = ""
 	}
 
-	// Generate audio response
+	
 	audioURL, err := s.generateAudioResponse(response.Text)
 	if err == nil {
 		response.AudioURL = audioURL
 	}
 
-	// Update session
+	
 	if err := repo.Sessions.UpdateSession(ctx, session); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -278,7 +278,7 @@ func (s *voiceService) ProcessConfirmation(ctx context.Context, userID string, r
 	return response, nil
 }
 
-// UPDATE GetVoiceHistory method in voice_sv.go
+
 func (s *voiceService) GetVoiceHistory(ctx context.Context, userID string, page, limit int) ([]voice.VoiceCommandHistory, int, error) {
 	requestID := contextPkg.GetRequestID(ctx)
 
@@ -311,7 +311,7 @@ func (s *voiceService) GetVoiceHistory(ctx context.Context, userID string, page,
 
 	var history []voice.VoiceCommandHistory
 	for _, cmd := range commands {
-		// Generate presigned URL for response audio if it exists
+		
 		audioURL := cmd.AudioURL
 		if audioURL != "" {
 			presignedURL, err := s.s3Client.PresignUrl(audioURL)
@@ -320,7 +320,7 @@ func (s *voiceService) GetVoiceHistory(ctx context.Context, userID string, page,
 			}
 		}
 
-		// Also presign the input audio file URL
+		
 		inputAudioURL := cmd.AudioFile
 		if inputAudioURL != "" {
 			presignedURL, err := s.s3Client.PresignUrl(inputAudioURL)
@@ -359,7 +359,7 @@ func (s *voiceService) GetVoiceAnalytics(ctx context.Context, userID string) (*v
 		return nil, err
 	}
 
-	// Get last 100 commands for analytics
+	
 	commands, _, err := repo.VoiceCommands.GetVoiceCommandsByUserID(ctx, userID, 100, 0)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -372,7 +372,7 @@ func (s *voiceService) GetVoiceAnalytics(ctx context.Context, userID string) (*v
 	return s.generateAnalytics(commands), nil
 }
 
-// Helper methods
+
 func (s *voiceService) validateAudioFile(file *multipart.FileHeader) error {
 	if file == nil {
 		return voice.ErrInvalidAudioFile
@@ -396,7 +396,7 @@ func (s *voiceService) getOrCreateSession(ctx context.Context, repo voiceReposit
 	session, err := repo.Sessions.GetSessionByUserID(ctx, userID)
 	if err != nil {
 		if err == voice.ErrSessionNotFound {
-			// Create new session
+			
 			sessionID, _ := s.utils.NewULIDFromTimestamp(time.Now())
 			now := time.Now()
 			
@@ -508,21 +508,21 @@ func (s *voiceService) generateAnalytics(commands []entity.VoiceCommand) *voice.
 	confidenceCount := 0
 
 	for _, cmd := range commands {
-		// Command frequency
+		
 		analytics.MostUsedCommands[cmd.Command]++
 		
-		// Success rate
+		
 		if cmd.Response != "" && cmd.Confidence > 0.5 {
 			successCount++
 		}
 
-		// Confidence stats
+		
 		if cmd.Confidence > 0 {
 			confidenceSum += cmd.Confidence
 			confidenceCount++
 		}
 
-		// Time-based usage
+		
 		hour := cmd.CreatedAt.Hour()
 		var timeSlot string
 		switch {
@@ -551,10 +551,10 @@ func (s *voiceService) generateAnalytics(commands []entity.VoiceCommand) *voice.
 func (s *voiceService) generateSuggestions(transcript string) []string {
 	var suggestions []string
 	
-	// Get all page mappings
+	
 	allMappings := s.nlpProcessor.GetAllMappings()
 	
-	// Find similar keywords
+	
 	cleanTranscript := strings.ToLower(transcript)
 	for _, mapping := range allMappings {
 		for _, keyword := range mapping.Keywords {
@@ -564,7 +564,7 @@ func (s *voiceService) generateSuggestions(transcript string) []string {
 			}
 		}
 		
-		// Limit suggestions
+		
 		if len(suggestions) >= 3 {
 			break
 		}
@@ -581,11 +581,11 @@ func (s *voiceService) calculateSimilarity(text1, text2 string) float64 {
 		return 0.8
 	}
 	
-	// Simple similarity - can be enhanced
+	
 	return 0.0
 }
 
-// Fix metadata handling
+
 func (s *voiceService) updateSessionFromResponse(session *entity.VoiceSession, response *voice.VoiceResponse) {
 	if response.Action == "confirm" {
 		session.PendingConfirmation = true
@@ -602,7 +602,7 @@ func (s *voiceService) updateSessionFromResponse(session *entity.VoiceSession, r
 	session.LastActivity = time.Now()
 }
 
-// Missing service methods for interface compliance
+
 func (s *voiceService) GetSmartSuggestions(ctx context.Context, userID string) (*voice.SuggestionsResponse, error) {
 	requestID := contextPkg.GetRequestID(ctx)
 
@@ -615,10 +615,10 @@ func (s *voiceService) GetSmartSuggestions(ctx context.Context, userID string) (
 		return nil, err
 	}
 
-	// Get user context (time of day, recent commands, etc.)
+	
 	context := s.getUserContext(userID)
 	
-	// Generate contextual suggestions
+	
 	suggestions := s.getContextualSuggestions(context)
 
 	return &voice.SuggestionsResponse{
@@ -630,7 +630,7 @@ func (s *voiceService) GetSmartSuggestions(ctx context.Context, userID string) (
 func (s *voiceService) TestNLPProcessing(ctx context.Context, req voice.NLPTestRequest) (*voice.NLPTestResponse, error) {
 	startTime := time.Now()
 	
-	// Process with NLP
+	
 	result, err := s.nlpProcessor.ProcessCommand(req.Text)
 	if err != nil {
 		return nil, err
@@ -638,7 +638,7 @@ func (s *voiceService) TestNLPProcessing(ctx context.Context, req voice.NLPTestR
 	
 	processingTime := time.Since(startTime)
 
-	// Convert nlp.MatchResult to voice.MatchResult
+	
 	var matches []voice.MatchResult
 	for _, match := range result.Matches {
 		matches = append(matches, voice.MatchResult{
@@ -653,7 +653,7 @@ func (s *voiceService) TestNLPProcessing(ctx context.Context, req voice.NLPTestR
 		Intent:     result.Intent,
 		Page:       result.Page,
 		Confidence: result.Confidence,
-		Matches:    matches, // Use converted matches
+		Matches:    matches, 
 		Processing: voice.ProcessingDetail{
 			CleanedText:    strings.ToLower(req.Text),
 			ProcessingTime: processingTime.String(),
@@ -661,7 +661,7 @@ func (s *voiceService) TestNLPProcessing(ctx context.Context, req voice.NLPTestR
 	}, nil
 }
 
-// Juga perlu fix handleIntentResult method untuk consistency
+
 func (s *voiceService) handleIntentResult(ctx context.Context, nlpResult *nlp.IntentResult, transcript string, session *entity.VoiceSession) *voice.VoiceResponse {
 	switch {
 	case nlpResult.Intent == "unknown":
@@ -678,7 +678,7 @@ func (s *voiceService) handleIntentResult(ctx context.Context, nlpResult *nlp.In
 func (s *voiceService) handleHighConfidence(nlpResult *nlp.IntentResult) *voice.VoiceResponse {
 	responseText := fmt.Sprintf("%s. Menuju ke %s.", nlpResult.PageDescription, nlpResult.PageDisplayName)
 
-	// Convert nlp.MatchResult to voice.MatchResult for metadata
+	
 	var matches []voice.MatchResult
 	for _, match := range nlpResult.Matches {
 		matches = append(matches, voice.MatchResult{
@@ -697,7 +697,7 @@ func (s *voiceService) handleHighConfidence(nlpResult *nlp.IntentResult) *voice.
 		Metadata: map[string]interface{}{
 			"page_id":    nlpResult.Page,
 			"confidence": nlpResult.Confidence,
-			"matches":    matches, // Use converted matches
+			"matches":    matches, 
 		},
 	}
 }
@@ -764,7 +764,7 @@ func (s *voiceService) CreatePageMapping(ctx context.Context, mapping voice.Page
 		return err
 	}
 
-	// Add to NLP processor
+	
 	nlpMapping := nlp.PageMappingData{
 		PageID:      mapping.PageID,
 		URL:         mapping.URL,
@@ -812,7 +812,7 @@ func (s *voiceService) UpdatePageMapping(ctx context.Context, pageID string, map
 		return err
 	}
 
-	// Update NLP processor
+	
 	nlpMapping := nlp.PageMappingData{
 		PageID:      pageID,
 		URL:         mapping.URL,
@@ -827,19 +827,19 @@ func (s *voiceService) UpdatePageMapping(ctx context.Context, pageID string, map
 	return repo.Commit()
 }
 
-// REPLACE ServeAudioFile method
+
 func (s *voiceService) ServeAudioFile(ctx context.Context, filename string) ([]byte, error) {
-	// Security check
+	
 	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		return nil, voice.ErrInvalidAudioFile
 	}
 
-	// Get presigned URL from S3
+	
 	s3URL := filename
 	if !strings.HasPrefix(filename, "http") {
-		// If filename is not a full URL, construct S3 URL
-		// You might need to adjust this based on your S3 bucket structure
-		s3URL = fmt.Sprintf("https://%s.s3.amazonaws.com/%s", 
+		
+		
+		s3URL = fmt.Sprintf("https://%s.s3.amazonaws.com/%s",
 			os.Getenv("AWS_BUCKET_NAME"), 
 			filename)
 	}
@@ -849,7 +849,7 @@ func (s *voiceService) ServeAudioFile(ctx context.Context, filename string) ([]b
 		return nil, voice.ErrInvalidAudioFile
 	}
 
-	// Download file from S3
+	
 	resp, err := http.Get(presignedURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download from S3: %w", err)
@@ -860,11 +860,11 @@ func (s *voiceService) ServeAudioFile(ctx context.Context, filename string) ([]b
 		return nil, voice.ErrInvalidAudioFile
 	}
 
-	// Read and return file content
+	
 	return io.ReadAll(resp.Body)
 }
 
-// Helper methods
+
 func (s *voiceService) getUserContext(userID string) map[string]interface{} {
 	now := time.Now()
 	hour := now.Hour()
@@ -894,7 +894,7 @@ func (s *voiceService) getContextualSuggestions(context map[string]interface{}) 
 	
 	timeOfDay, _ := context["time_of_day"].(string)
 	
-	// Time-based suggestions
+	
 	switch timeOfDay {
 	case "morning":
 		suggestions = append(suggestions,
@@ -938,15 +938,15 @@ func (s *voiceService) getContextualSuggestions(context map[string]interface{}) 
 	return suggestions
 }
 
-// REPLACE the existing saveAudioFile method with this:
+
 func (s *voiceService) saveAudioFile(audioFile *multipart.FileHeader) (string, error) {
-	// Upload directly to S3
+	
 	s3URL, err := s.s3Client.UploadFile(audioFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload audio to S3: %w", err)
 	}
 	
-	// Extract filename from S3 URL for reference
+	
 	parts := strings.Split(s3URL, "/")
 	filename := parts[len(parts)-1]
 	
@@ -958,22 +958,22 @@ func (s *voiceService) saveAudioFile(audioFile *multipart.FileHeader) (string, e
 	return s3URL, nil
 }
 
-// UPDATE transcribeAudio to work with S3 URLs
+
 func (s *voiceService) transcribeAudio(s3URL string) (string, error) {
-	// Download file from S3 to temporary location for transcription
+	
 	presignedURL, err := s.s3Client.PresignUrl(s3URL)
 	if err != nil {
 		return "", fmt.Errorf("failed to presign S3 URL: %w", err)
 	}
 
-	// Download file content
+	
 	resp, err := http.Get(presignedURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download audio from S3: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Create temporary file
+	
 	tmpFile, err := os.CreateTemp("", "voice-*.mp3")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
@@ -981,13 +981,13 @@ func (s *voiceService) transcribeAudio(s3URL string) (string, error) {
 	defer os.Remove(tmpFile.Name())
 	defer tmpFile.Close()
 
-	// Copy S3 content to temp file
+	
 	_, err = io.Copy(tmpFile, resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to write temp file: %w", err)
 	}
 
-	// Transcribe using OpenAI Whisper
+	
 	file, err := os.Open(tmpFile.Name())
 	if err != nil {
 		return "", err
@@ -1009,9 +1009,9 @@ func (s *voiceService) transcribeAudio(s3URL string) (string, error) {
 	return transcribeResp.Text, nil
 }
 
-// UPDATE generateAudioResponse to save to S3
+
 func (s *voiceService) generateAudioResponse(text string) (string, error) {
-	// Call ElevenLabs API
+	
 	url := "https://api.elevenlabs.io/v1/text-to-speech/" + s.config.ElevenLabsVoiceID
 
 	requestBody := map[string]interface{}{
@@ -1051,16 +1051,16 @@ func (s *voiceService) generateAudioResponse(text string) (string, error) {
 		return "", fmt.Errorf("ElevenLabs API error: %s - %s", resp.Status, string(bodyBytes))
 	}
 
-	// Read audio data into memory
+	
 	audioData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read audio response: %w", err)
 	}
 
-	// Generate unique filename
+	
 	audioFilename := fmt.Sprintf("tts-%s.mp3", uuid.New().String())
 
-	// Upload directly to S3 using the new method
+	
 	s3URL, err := s.s3Client.UploadFileFromBytes(audioFilename, audioData)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload TTS audio to S3: %w", err)
@@ -1075,5 +1075,5 @@ func (s *voiceService) generateAudioResponse(text string) (string, error) {
 	return s3URL, nil
 }
 
-// Remove the uploadFileToS3 helper method - tidak diperlukan lagi
+
 

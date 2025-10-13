@@ -262,10 +262,10 @@ func (s *authDomainImpl) VerifyOTPandUpdatePIN(c context.Context, req auth.OTPPI
 func (s *authDomainImpl) SendEmailOTP(c context.Context, email string) error {
 	requestID := contextPkg.GetRequestID(c)
 
-	// Generate a 5-digit OTP code
+	
 	verificationCode := fmt.Sprintf("%05d", 10000+rand.Intn(90000))
 
-	// Store the OTP in Redis with a 5-minute expiration
+	
 	if err := s.redisServer.SetOTP(c, email, verificationCode, 5*time.Minute); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -274,7 +274,7 @@ func (s *authDomainImpl) SendEmailOTP(c context.Context, email string) error {
 		return err
 	}
 
-	// Send the OTP via email
+	
 	if err := s.smtpMailer.CreateSmtp(email, verificationCode); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -294,7 +294,7 @@ func (s *authDomainImpl) SendEmailOTP(c context.Context, email string) error {
 func (s *authDomainImpl) VerifyEmailOTP(c context.Context, userID string, email string, code string) error {
 	requestID := contextPkg.GetRequestID(c)
 
-	// Retrieve the stored OTP from Redis
+	
 	storedOTP, err := s.redisServer.GetOTP(c, email)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -304,7 +304,7 @@ func (s *authDomainImpl) VerifyEmailOTP(c context.Context, userID string, email 
 		return auth.ErrorTokenExpired
 	}
 
-	// Verify the OTP
+	
 	if storedOTP != code {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -313,7 +313,7 @@ func (s *authDomainImpl) VerifyEmailOTP(c context.Context, userID string, email 
 		return auth.ErrorInvalidToken
 	}
 
-	// Get a database client
+	
 	repo, err := s.repo.NewClient(true)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -324,7 +324,7 @@ func (s *authDomainImpl) VerifyEmailOTP(c context.Context, userID string, email 
 	}
 	defer repo.Rollback()
 
-	// Check if email is already in use by another user
+	
 	existingUser, err := repo.Users.GetByEmail(c, email)
 	if err == nil && existingUser.ID != userID {
 		s.log.WithFields(logrus.Fields{
@@ -334,7 +334,7 @@ func (s *authDomainImpl) VerifyEmailOTP(c context.Context, userID string, email 
 		return auth.ErrEmailAlreadyInUse
 	}
 
-	// Get current user
+	
 	user, err := repo.Users.GetByID(c, userID)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -344,11 +344,11 @@ func (s *authDomainImpl) VerifyEmailOTP(c context.Context, userID string, email 
 		return err
 	}
 
-	// Update user email
+	
 	user.Email = email
 	user.UpdatedAt = time.Now()
 
-	// Save user with updated email
+	
 	if err := repo.Users.UpdateUser(c, user); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -357,7 +357,7 @@ func (s *authDomainImpl) VerifyEmailOTP(c context.Context, userID string, email 
 		return err
 	}
 
-	// Commit the transaction
+	
 	if err := repo.Commit(); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,

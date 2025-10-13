@@ -39,9 +39,9 @@ func (s *voiceService) ProcessTransactionCommand(
 		}, nil
 	}
 
-	// Check if category is missing
+	
 	if txData.Category == "" {
-		// Store transaction data in session context
+		
 		session.Context = map[string]interface{}{
 			"step":              "awaiting_category",
 			"transaction_type":  txData.Type,
@@ -51,7 +51,7 @@ func (s *voiceService) ProcessTransactionCommand(
 		session.PendingConfirmation = true
 		session.LastActivity = time.Now()
 
-		// Get available categories
+		
 		categories := s.getAvailableCategories(txData.Type)
 		categoriesText := strings.Join(categories, ", ")
 
@@ -73,7 +73,7 @@ func (s *voiceService) ProcessTransactionCommand(
 		}, nil
 	}
 
-	// Create transaction
+	
 	return s.createBudgetTransaction(ctx, userID, txData)
 }
 
@@ -83,9 +83,9 @@ func (s *voiceService) ProcessCategorySelection(
 	categoryInput string,
 	session *entity.VoiceSession,
 ) (*voice.VoiceResponse, error) {
-	//requestID := contextPkg.GetRequestID(ctx)
+	
 
-	// Validate session context
+	
 	if session.Context["step"] != "awaiting_category" {
 		return &voice.VoiceResponse{
 			Text:    "Maaf, tidak ada transaksi yang sedang menunggu kategori.",
@@ -94,15 +94,15 @@ func (s *voiceService) ProcessCategorySelection(
 		}, nil
 	}
 
-	// Extract transaction data from session
+	
 	txType := session.Context["transaction_type"].(string)
 	amount := session.Context["transaction_amount"].(float64)
 	description := session.Context["transaction_desc"].(string)
 
-	// Clean and validate category
+	
 	category := strings.ToLower(strings.TrimSpace(categoryInput))
 	
-	// Validate category
+	
 	if !entity.IsValidCategory(txType, category) {
 		categories := s.getAvailableCategories(txType)
 		categoriesText := strings.Join(categories, ", ")
@@ -124,7 +124,7 @@ func (s *voiceService) ProcessCategorySelection(
 		}, nil
 	}
 
-	// Create transaction data
+	
 	txData := &nlp.TransactionData{
 		Type:        txType,
 		Amount:      amount,
@@ -133,11 +133,11 @@ func (s *voiceService) ProcessCategorySelection(
 		Confidence:  0.9,
 	}
 
-	// Clear session context
+	
 	session.PendingConfirmation = false
 	session.Context = make(map[string]interface{})
 
-	// Create transaction
+	
 	return s.createBudgetTransaction(ctx, userID, txData)
 }
 
@@ -148,7 +148,7 @@ func (s *voiceService) createBudgetTransaction(
 ) (*voice.VoiceResponse, error) {
 	requestID := contextPkg.GetRequestID(ctx)
 
-	// Create transaction request
+	
 	req := budget_manager.CreateTransactionRequest{
 		UserID:      userID,
 		Title:       txData.Description,
@@ -158,7 +158,7 @@ func (s *voiceService) createBudgetTransaction(
 		Category:    txData.Category,
 	}
 
-	// Call budget service
+	
 	if err := s.budgetService.CreateTransaction(ctx, req, nil); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -172,7 +172,7 @@ func (s *voiceService) createBudgetTransaction(
 		}, err
 	}
 
-	// Format response
+	
 	typeText := "Pemasukan"
 	if txData.Type == "expense" {
 		typeText = "Pengeluaran"
@@ -208,7 +208,7 @@ func (s *voiceService) ProcessDeleteTransaction(
 
 	extractor := nlp.NewNumberExtractor()
 	
-	// Extract amount and description
+	
 	amount, _ := extractor.ExtractAmount(transcript)
 	description := extractor.ExtractDescription(transcript, amount)
 
@@ -220,7 +220,7 @@ func (s *voiceService) ProcessDeleteTransaction(
 		}, nil
 	}
 
-	// Search for matching transaction
+	
 	transactions, err := s.budgetService.GetTransactionsByUserID(ctx, userID)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -235,7 +235,7 @@ func (s *voiceService) ProcessDeleteTransaction(
 		}, err
 	}
 
-	// Find matching transaction
+	
 	var matchedTx *entity.BudgetTransaction
 	for _, tx := range transactions {
 		if tx.Nominal == amount {
@@ -254,7 +254,7 @@ func (s *voiceService) ProcessDeleteTransaction(
 		}, nil
 	}
 
-	// Ask for confirmation
+	
 	responseText := fmt.Sprintf(
 		"Apakah Anda yakin ingin hapus transaksi Rp%.0f %s?",
 		matchedTx.Nominal,
@@ -278,7 +278,7 @@ func (s *voiceService) ProcessMonthlySummary(
 ) (*voice.VoiceResponse, error) {
 	requestID := contextPkg.GetRequestID(ctx)
 
-	// Get current month transactions
+	
 	transactions, err := s.budgetService.GetTransactionsByPeriod(ctx, userID, "month")
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -323,31 +323,33 @@ func (s *voiceService) ProcessMonthlySummary(
 	}, nil
 }
 
+
+
 func (s *voiceService) getAvailableCategories(transactionType string) []string {
 	if transactionType == "income" {
-		return []string{"Gaji", "Bonus", "Investasi", "Bisnis", "Freelance", "Lainnya"}
+		return []string{"Gaji", "Bonus", "Investasi", "Part Time", "Lainnya"} 
 	}
-	return []string{"Makanan", "Transportasi", "Belanja", "Kesehatan", "Hiburan", "Tagihan", "Lainnya"}
+	return []string{"Makanan", "Sehari-hari", "Transportasi", "Sosial", "Perumahan", "Hadiah", "Komunikasi", "Pakaian", "Hiburan", "Tampilan", "Kesehatan", "Pajak", "Pendidikan", "Investasi", "Peliharaan", "Liburan", "Lainnya"} 
 }
 
 func (s *voiceService) detectCommandType(transcript string) string {
 	transcript = strings.ToLower(transcript)
 
-	// Transaction keywords - MORE FLEXIBLE
+	
 	transactionKeywords := []string{
 		"tambah", "catat", "buat transaksi", "pencatatan",
-		"beli", "bayar", "belanja", "buat", // ADD THESE
-		"dapat", "terima", "pendapatan", "masuk", // ADD THESE
+		"beli", "bayar", "belanja", "buat", 
+		"dapat", "terima", "pendapatan", "masuk", 
 	}
 	
 	transactionDeleteKeywords := []string{"hapus", "delete", "buang"}
 	summaryKeywords := []string{"ringkas", "summary", "total", "saldo"}
 	navigationKeywords := []string{"buka", "pergi", "lihat", "tampilkan"}
 
-	// Check for transaction
+	
 	for _, keyword := range transactionKeywords {
 		if strings.Contains(transcript, keyword) {
-			// Check if it has amount indicators
+			
 			hasAmount := strings.Contains(transcript, "ribu") || 
 				strings.Contains(transcript, "juta") || 
 				regexp.MustCompile(`\d+`).MatchString(transcript)

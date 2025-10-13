@@ -32,16 +32,16 @@ func New(
 func (h *BlogsHandler) Start(srv fiber.Router) {
 	blogs := srv.Group("/blogs")
 
-	// Create blog (requires auth)
+	
 	blogs.Post("/", h.middleware.NewTokenMiddleware, h.CreateBlog)
 
-	// Public endpoints (no auth required)
+	
 	blogs.Get("", h.GetAllBlogs)
 	blogs.Get("/categories", h.GetAllCategories)
 	blogs.Get("/category/:id", h.GetBlogsByCategory)
 	blogs.Get("/:id", h.GetBlogByID)
 
-	// Update and delete (requires auth)
+	
 	blogs.Put("/:id", h.middleware.NewTokenMiddleware, h.UpdateBlog)
 	blogs.Delete("/:id", h.middleware.NewTokenMiddleware, h.DeleteBlog)
 }

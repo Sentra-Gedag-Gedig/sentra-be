@@ -12,7 +12,7 @@ type ProcessVoiceRequest struct {
 
 type VoiceResponse struct {
 	Text         string                 `json:"text"`
-	Transcript   string                 `json:"transcript,omitempty"` // ← Field baru
+	Transcript   string                 `json:"transcript,omitempty"` 
 	AudioURL     string                 `json:"audio_url,omitempty"`
 	Action       string                 `json:"action"`
 	Target       string                 `json:"target,omitempty"`
@@ -79,7 +79,7 @@ type NLPTestResponse struct {
 type MatchResult struct {
 	Keyword string  `json:"keyword"`
 	Score   float64 `json:"score"`
-	Type    string  `json:"type"` // exact, synonym, fuzzy
+	Type    string  `json:"type"` 
 }
 
 type ProcessingDetail struct {

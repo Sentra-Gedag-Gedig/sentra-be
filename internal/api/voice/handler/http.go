@@ -32,30 +32,30 @@ func New(
 func (h *VoiceHandler) Start(srv fiber.Router) {
 	voice := srv.Group("/voice")
 
-	// All voice endpoints require authentication
+	
 	voice.Use(h.middleware.NewTokenMiddleware)
 
-	// TAHAP 1: Command-based (strict format)
+	
 	voice.Post("/command", h.ProcessVoiceCommand)
 	voice.Post("/confirm", h.ProcessConfirmation)
 
-	// TAHAP 2: GPT-based conversational (natural language)
+	
 	voice.Post("/chat", h.ProcessChatCommand)
 
-	// Voice history and analytics
+	
 	voice.Get("/history", h.GetVoiceHistory)
 	voice.Get("/analytics", h.GetVoiceAnalytics)
 
-	// Smart suggestions and help
+	
 	voice.Get("/suggestions", h.GetSmartSuggestions)
 
-	// NLP testing and page mappings (admin endpoints)
+	
 	nlp := voice.Group("/nlp")
 	nlp.Post("/test", h.TestNLPProcessing)
 	nlp.Get("/mappings", h.GetPageMappings)
 	nlp.Post("/mappings", h.CreatePageMapping)
 	nlp.Put("/mappings/:page_id", h.UpdatePageMapping)
 
-	// Audio file serving
+	
 	voice.Get("/audio/:filename", h.ServeAudioFile)
 }

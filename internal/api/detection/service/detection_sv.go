@@ -34,7 +34,7 @@ func (s *detectionService) ProcessQRISFrame(frame []byte) (*entity.QRISDetection
 	return result, nil
 }
 
-// Updated to handle both binary data and base64 string
+
 func (s *detectionService) ExtractAndSaveKTP(ctx context.Context, imageData interface{}) (*detection.KTP, error) {
 	prompt := `
 	Ekstrak semua informasi dari KTP Indonesia ini dan berikan hasilnya dalam format JSON.
@@ -63,13 +63,13 @@ func (s *detectionService) ExtractAndSaveKTP(ctx context.Context, imageData inte
 	var base64Image string
 	var err error
 
-	// Handle different input types
+	
 	switch v := imageData.(type) {
 	case string:
-		// Already base64 string
+		
 		base64Image = v
 	case []byte:
-		// Binary data, convert to base64
+		
 		base64Image = base64.StdEncoding.EncodeToString(v)
 	default:
 		return nil, errors.New("invalid image data type")
@@ -85,9 +85,9 @@ func (s *detectionService) ExtractAndSaveKTP(ctx context.Context, imageData inte
 	return ktp, nil
 }
 
-// Updated method signature to accept binary data directly
+
 func (s *detectionService) ExtractAndSaveKTPFromBinary(ctx context.Context, binaryData []byte) (*detection.KTP, error) {
-	// Convert binary to base64
+	
 	base64Image := base64.StdEncoding.EncodeToString(binaryData)
 	return s.ExtractAndSaveKTP(ctx, base64Image)
 }
@@ -156,13 +156,13 @@ func (s *detectionService) DetectMoney(ctx context.Context, imageData interface{
 	var base64Image string
 	var err error
 
-	// Handle different input types
+	
 	switch v := imageData.(type) {
 	case string:
-		// Already base64 string
+		
 		base64Image = v
 	case []byte:
-		// Binary data, convert to base64
+		
 		base64Image = base64.StdEncoding.EncodeToString(v)
 	default:
 		return nil, errors.New("invalid image data type")

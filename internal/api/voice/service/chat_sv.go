@@ -32,7 +32,7 @@ func (s *voiceService) ProcessChatCommand(
 	}
 	defer repo.Rollback()
 
-	// Validate and transcribe audio
+	
 	if err := s.validateAudioFile(req.AudioFile); err != nil {
 		return nil, err
 	}
@@ -52,20 +52,20 @@ func (s *voiceService) ProcessChatCommand(
 		"transcript": transcript,
 	}).Info("Chat transcript received")
 
-	// Get or create session
+	
 	session, err := s.getOrCreateSession(ctx, repo, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if user is in confirmation state
+	
 	if session.PendingConfirmation {
 		response, err := s.handleConfirmationState(ctx, repo, userID, transcript, session)
 		if err != nil {
 			return nil, err
 		}
 		
-		// Generate audio for response
+		
 		audioURL, err := s.generateAudioResponse(response.Text)
 		if err == nil {
 			response.AudioURL = audioURL
@@ -73,7 +73,7 @@ func (s *voiceService) ProcessChatCommand(
 		
 		response.Transcript = transcript
 		
-		// Save command to database
+		
 		if err := s.saveVoiceCommand(ctx, repo, userID, audioFilename, transcript, response); err != nil {
 			s.log.WithFields(logrus.Fields{
 				"request_id": requestID,
@@ -88,7 +88,7 @@ func (s *voiceService) ProcessChatCommand(
 		return response, nil
 	}
 
-	// Get available pages for navigation
+	
 	availablePages, err := s.getAvailablePagesForGPT(ctx, repo)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -98,7 +98,7 @@ func (s *voiceService) ProcessChatCommand(
 		availablePages = []chatGPT.PageInfo{}
 	}
 
-	// Process with multi-intent detection
+	
 	multiIntent, err := s.chatGPT.ProcessMultiIntent(ctx, transcript, availablePages)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -108,7 +108,7 @@ func (s *voiceService) ProcessChatCommand(
 		return nil, err
 	}
 
-	// Handle clarification needed
+	
 	if multiIntent.NeedsClarification {
 		response := &voice.VoiceResponse{
 			Text:       multiIntent.ClarificationQuestion,
@@ -137,13 +137,13 @@ func (s *voiceService) ProcessChatCommand(
 		return response, nil
 	}
 
-	// Process intents
+	
 	response, err := s.processMultiIntents(ctx, repo, userID, multiIntent, session, transcript)
 	if err != nil {
 		return nil, err
 	}
 
-	// Generate audio response
+	
 	audioURL, err := s.generateAudioResponse(response.Text)
 	if err == nil {
 		response.AudioURL = audioURL
@@ -151,7 +151,7 @@ func (s *voiceService) ProcessChatCommand(
 
 	response.Transcript = transcript
 
-	// Save voice command
+	
 	if err := s.saveVoiceCommand(ctx, repo, userID, audioFilename, transcript, response); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -159,7 +159,7 @@ func (s *voiceService) ProcessChatCommand(
 		}).Warn("Failed to save voice command")
 	}
 
-	// Update session
+	
 	s.updateConversationHistory(session, transcript, response.Text)
 	if err := repo.Sessions.UpdateSession(ctx, *session); err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -175,7 +175,9 @@ func (s *voiceService) ProcessChatCommand(
 	return response, nil
 }
 
-// Process multiple intents in order
+
+
+
 func (s *voiceService) processMultiIntents(
 	ctx context.Context,
 	repo voiceRepository.Client,  
@@ -187,7 +189,6 @@ func (s *voiceService) processMultiIntents(
 	requestID := contextPkg.GetRequestID(ctx)
 
 	if len(multiIntent.Intents) == 0 {
-		// No intent detected, treat as general query
 		conversationHistory := s.getConversationHistory(session)
 		gptResponse, err := s.chatGPT.ProcessConversation(ctx, transcript, conversationHistory)
 		if err != nil {
@@ -209,10 +210,9 @@ func (s *voiceService) processMultiIntents(
 	var pendingContext map[string]interface{}
 	successCount := 0
 
-	// Process each intent in order
 	for _, intent := range multiIntent.Intents {
 		s.log.WithFields(logrus.Fields{
-			"request_id": requestID,
+			"request_id":  requestID,
 			"intent_type": intent.Type,
 			"action":      intent.Action,
 			"order":       intent.Order,
@@ -268,6 +268,47 @@ func (s *voiceService) processMultiIntents(
 				}
 			}
 
+		case "delete_transaction":
+			response, err := s.handleDeleteTransactionIntent(ctx, userID, intent, session)
+			if err != nil {
+				s.log.WithFields(logrus.Fields{
+					"request_id": requestID,
+					"error":      err.Error(),
+				}).Error("Failed to handle delete transaction intent")
+				responses = append(responses, "Maaf, gagal menghapus transaksi.")
+				continue
+			}
+
+			responses = append(responses, response.Text)
+			if response.Success {
+				successCount++
+				if finalAction == "" {
+					finalAction = "delete_transaction"
+				}
+			} else {
+				needsConfirmation = response.SessionState != nil && response.SessionState.PendingConfirmation
+				if needsConfirmation {
+					pendingContext = response.SessionState.Context
+				}
+			}
+
+		
+		case "logout":
+			response, err := s.handleLogoutIntent(ctx, intent, session)
+			if err != nil {
+				s.log.WithFields(logrus.Fields{
+					"request_id": requestID,
+					"error":      err.Error(),
+				}).Error("Failed to handle logout intent")
+				responses = append(responses, "Maaf, gagal memproses logout.")
+				continue
+			}
+
+			responses = append(responses, response.Text)
+			needsConfirmation = true 
+			pendingContext = response.SessionState.Context
+			finalAction = "confirm_logout"
+
 		case "query":
 			conversationHistory := s.getConversationHistory(session)
 			gptResponse, err := s.chatGPT.ProcessConversation(ctx, transcript, conversationHistory)
@@ -283,7 +324,6 @@ func (s *voiceService) processMultiIntents(
 		}
 	}
 
-	// Build final response
 	finalText := strings.Join(responses, " ")
 	
 	if finalAction == "" {
@@ -302,7 +342,6 @@ func (s *voiceService) processMultiIntents(
 		},
 	}
 
-	// Set session state if confirmation needed
 	if needsConfirmation {
 		session.PendingConfirmation = true
 		session.Context = pendingContext
@@ -318,7 +357,7 @@ func (s *voiceService) processMultiIntents(
 	return finalResponse, nil
 }
 
-// Handle navigation intent
+
 func (s *voiceService) handleNavigationIntent(
 	ctx context.Context,
 	intent chatGPT.Intent,
@@ -326,7 +365,7 @@ func (s *voiceService) handleNavigationIntent(
 ) (*voice.VoiceResponse, error) {
 	requestID := contextPkg.GetRequestID(ctx)
 
-	// Extract navigation data
+	
 	pageID, _ := intent.Data["page_id"].(string)
 	url, _ := intent.Data["url"].(string)
 	displayName, _ := intent.Data["display_name"].(string)
@@ -347,9 +386,9 @@ func (s *voiceService) handleNavigationIntent(
 		"confidence":   intent.Confidence,
 	}).Info("Navigating to page")
 
-	// Check confidence
+	
 	if intent.Confidence < 0.7 {
-		// Ask for confirmation
+		
 		session.PendingConfirmation = true
 		session.PendingPageID = pageID
 		session.Context = map[string]interface{}{
@@ -375,7 +414,7 @@ func (s *voiceService) handleNavigationIntent(
 		}, nil
 	}
 
-	// High confidence, navigate directly
+	
 	responseText := fmt.Sprintf("Baik, membuka halaman %s.", displayName)
 	return &voice.VoiceResponse{
 		Text:       responseText,
@@ -390,7 +429,6 @@ func (s *voiceService) handleNavigationIntent(
 	}, nil
 }
 
-// Handle transaction intent
 func (s *voiceService) handleTransactionIntent(
 	ctx context.Context,
 	userID string,
@@ -399,7 +437,7 @@ func (s *voiceService) handleTransactionIntent(
 ) (*voice.VoiceResponse, error) {
 	requestID := contextPkg.GetRequestID(ctx)
 
-	// Extract transaction data
+	
 	amount, _ := intent.Data["amount"].(float64)
 	description, _ := intent.Data["description"].(string)
 	category, _ := intent.Data["category"].(string)
@@ -414,7 +452,7 @@ func (s *voiceService) handleTransactionIntent(
 		"confidence":  intent.Confidence,
 	}).Info("Processing transaction intent")
 
-	// Validate required fields
+	
 	if amount == 0 || txType == "" {
 		return &voice.VoiceResponse{
 			Text:    "Maaf, informasi transaksi tidak lengkap. Bisa ulangi dengan menyebutkan nominal dan jenisnya?",
@@ -423,44 +461,17 @@ func (s *voiceService) handleTransactionIntent(
 		}, nil
 	}
 
-	// If category not provided or low confidence, ask for category
-	if category == "" || intent.Confidence < 0.8 {
-		session.PendingConfirmation = true
-		session.Context = map[string]interface{}{
-			"step":               "awaiting_category",
-			"transaction_type":   txType,
-			"transaction_amount": amount,
-			"transaction_desc":   description,
-		}
-
-		categories := s.getAvailableCategories(txType)
-		categoriesText := strings.Join(categories, ", ")
-
-		typeText := "pengeluaran"
-		if txType == "income" {
-			typeText = "pemasukan"
-		}
-
-		responseText := fmt.Sprintf(
-			"Saya catat %s Rp%.0f untuk %s. Kategori apa? Pilihan: %s",
-			typeText,
-			amount,
-			description,
-			categoriesText,
-		)
-
-		return &voice.VoiceResponse{
-			Text:    responseText,
-			Action:  "ask_category",
-			Success: false,
-			SessionState: &voice.SessionState{
-				PendingConfirmation: true,
-				Context:             session.Context,
-			},
-		}, nil
+	
+	if category == "" || !entity.IsValidCategory(txType, category) {
+		category = "lainnya"
+		s.log.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"original_category": intent.Data["category"],
+			"fallback_to": "lainnya",
+		}).Info("Category not recognized, using fallback 'lainnya'")
 	}
 
-	// Create transaction directly
+	
 	txData := &nlp.TransactionData{
 		Type:        txType,
 		Amount:      amount,
@@ -477,9 +488,6 @@ func (s *voiceService) handleTransactionIntent(
 	return response, nil
 }
 
-// Handle confirmation state (when user is confirming something)
-// Line ~245 di chat_sv.go
-// Handle confirmation state (when user is confirming something)
 func (s *voiceService) handleConfirmationState(
 	ctx context.Context,
 	repo voiceRepository.Client,
@@ -504,8 +512,10 @@ func (s *voiceService) handleConfirmationState(
 	case "awaiting_navigation_confirmation":
 		return s.handleNavigationConfirmation(ctx, transcript, session)
 
+	case "awaiting_logout_confirmation":
+		return s.handleLogoutConfirmation(ctx, transcript, session)
+
 	default:
-		// Unknown step, clear pending state
 		session.PendingConfirmation = false
 		session.Context = make(map[string]interface{})
 
@@ -517,14 +527,54 @@ func (s *voiceService) handleConfirmationState(
 	}
 }
 
-// Handle category confirmation for transaction
+func (s *voiceService) handleLogoutConfirmation(
+	ctx context.Context,
+	transcript string,
+	session *entity.VoiceSession,
+) (*voice.VoiceResponse, error) {
+	
+	isConfirmed := s.isConfirmation(transcript)
+
+	if !isConfirmed {
+		
+		session.PendingConfirmation = false
+		session.Context = make(map[string]interface{})
+
+		return &voice.VoiceResponse{
+			Text:    "Baik, logout dibatalkan. Ada yang bisa saya bantu?",
+			Action:  "cancelled",
+			Success: false,
+		}, nil
+	}
+
+	
+	logoutURL, _ := session.Context["logout_url"].(string)
+
+	
+	session.PendingConfirmation = false
+	session.Context = make(map[string]interface{})
+
+	return &voice.VoiceResponse{
+		Text:       "Baik, Anda akan keluar dari aplikasi.",
+		Action:     "logout",
+		Target:     logoutURL,
+		Success:    true,
+		Confidence: 1.0,
+		Metadata: map[string]interface{}{
+			"logout_url": logoutURL,
+			"message":    "Frontend will handle logout locally",
+		},
+	}, nil
+}
+
+
 func (s *voiceService) handleCategoryConfirmation(
 	ctx context.Context,
 	userID string,
 	transcript string,
 	session *entity.VoiceSession,
 ) (*voice.VoiceResponse, error) {
-	// Extract pending transaction data
+	
 	txType, ok := session.Context["transaction_type"].(string)
 	if !ok {
 		return &voice.VoiceResponse{
@@ -545,13 +595,13 @@ func (s *voiceService) handleCategoryConfirmation(
 
 	description, _ := session.Context["transaction_desc"].(string)
 	if description == "" {
-		description = "Transaksi" // default description
+		description = "Transaksi" 
 	}
 
-	// Normalize category from user response
+	
 	category := s.normalizeCategoryName(transcript)
 
-	// Validate category
+	
 	validCategories := s.getAvailableCategories(txType)
 	isValid := false
 	for _, validCat := range validCategories {
@@ -580,7 +630,7 @@ func (s *voiceService) handleCategoryConfirmation(
 		}, nil
 	}
 
-	// Create transaction data
+	
 	txData := &nlp.TransactionData{
 		Type:        txType,
 		Amount:      amount,
@@ -589,30 +639,30 @@ func (s *voiceService) handleCategoryConfirmation(
 		Confidence:  0.95,
 	}
 
-	// Create transaction
+	
 	response, err := s.createBudgetTransaction(ctx, userID, txData)
 	if err != nil {
 		return nil, err
 	}
 
-	// Clear pending state
+	
 	session.PendingConfirmation = false
 	session.Context = make(map[string]interface{})
 
 	return response, nil
 }
 
-// Handle navigation confirmation
+
 func (s *voiceService) handleNavigationConfirmation(
 	ctx context.Context,
 	transcript string,
 	session *entity.VoiceSession,
 ) (*voice.VoiceResponse, error) {
-	// Check if user confirmed
+	
 	isConfirmed := s.isConfirmation(transcript)
 
 	if !isConfirmed {
-		// User declined
+		
 		session.PendingConfirmation = false
 		session.PendingPageID = ""
 		session.Context = make(map[string]interface{})
@@ -624,7 +674,7 @@ func (s *voiceService) handleNavigationConfirmation(
 		}, nil
 	}
 
-	// Get pending page data
+	
 	pendingPage, ok := session.Context["pending_page"].(map[string]interface{})
 	if !ok {
 		session.PendingConfirmation = false
@@ -640,7 +690,7 @@ func (s *voiceService) handleNavigationConfirmation(
 	url, _ := pendingPage["url"].(string)
 	displayName, _ := pendingPage["display_name"].(string)
 
-	// Clear pending state
+	
 	session.PendingConfirmation = false
 	session.PendingPageID = ""
 	session.Context = make(map[string]interface{})
@@ -658,10 +708,10 @@ func (s *voiceService) handleNavigationConfirmation(
 	}, nil
 }
 
-// Get available pages for GPT context
+
 func (s *voiceService) getAvailablePagesForGPT(
 	ctx context.Context,
-	repo voiceRepository.Client,  // ✅ Gunakan Client type langsung
+	repo voiceRepository.Client,  
 ) ([]chatGPT.PageInfo, error) {
 	mappings, err := repo.PageMappings.GetAllPageMappings(ctx)
 	if err != nil {
@@ -687,10 +737,10 @@ func (s *voiceService) getAvailablePagesForGPT(
 	return pages, nil
 }
 
-// Line ~307 di chat_sv.go
+
 func (s *voiceService) saveVoiceCommand(
 	ctx context.Context,
-	repo voiceRepository.Client,  // ✅ Ganti dari interface{}
+	repo voiceRepository.Client,  
 	userID string,
 	audioFile string,
 	transcript string,
@@ -719,7 +769,7 @@ func (s *voiceService) saveVoiceCommand(
 	return repo.VoiceCommands.CreateVoiceCommand(ctx, voiceCommand)
 }
 
-// Existing helper methods from previous chat_sv.go
+
 func (s *voiceService) handleGPTTransaction(
 	ctx context.Context,
 	userID string,
@@ -782,28 +832,56 @@ func (s *voiceService) handleGPTTransaction(
 	}, nil
 }
 
+
+
 func (s *voiceService) normalizeCategoryName(category string) string {
 	categoryMap := map[string]string{
+		
 		"makanan":       "makanan",
 		"food":          "makanan",
+		"sehari-hari":   "sehari-hari",
+		"daily":         "sehari-hari",
 		"transportasi":  "transportasi",
 		"transport":     "transportasi",
-		"belanja":       "belanja",
-		"shopping":      "belanja",
-		"kesehatan":     "kesehatan",
-		"health":        "kesehatan",
+		"sosial":        "sosial",
+		"social":        "sosial",
+		"perumahan":     "perumahan",
+		"housing":       "perumahan",
+		"hadiah":        "hadiah",
+		"gift":          "hadiah",
+		"komunikasi":    "komunikasi",
+		"communication": "komunikasi",
+		"pakaian":       "pakaian",
+		"clothing":      "pakaian",
 		"hiburan":       "hiburan",
 		"entertainment": "hiburan",
-		"tagihan":       "tagihan",
-		"bills":         "tagihan",
+		"tampilan":      "tampilan",
+		"appearance":    "tampilan",
+		"kesehatan":     "kesehatan",
+		"health":        "kesehatan",
+		"pajak":         "pajak",
+		"tax":           "pajak",
+		"pendidikan":    "pendidikan",
+		"education":     "pendidikan",
+		"investasi":     "investasi",
+		"investment":    "investasi",
+		"peliharaan":    "peliharaan",
+		"pet":           "peliharaan",
+		"liburan":       "liburan",
+		"vacation":      "liburan",
+		
+		
 		"gaji":          "gaji",
 		"salary":        "gaji",
 		"bonus":         "bonus",
-		"investasi":     "investasi",
-		"investment":    "investasi",
-		"bisnis":        "bisnis",
-		"business":      "bisnis",
-		"freelance":     "freelance",
+		"part time":     "part time",
+		"parttime":      "part time",
+		
+		
+		"lainnya":       "lainnya",
+		"other":         "lainnya",
+		"lain":          "lainnya",
+		"others":        "lainnya",
 	}
 
 	normalized := strings.ToLower(strings.TrimSpace(category))
@@ -811,7 +889,8 @@ func (s *voiceService) normalizeCategoryName(category string) string {
 		return mapped
 	}
 
-	return normalized
+	
+	return "lainnya"
 }
 
 func (s *voiceService) getTypeText(txType string) string {
@@ -852,11 +931,203 @@ func (s *voiceService) updateConversationHistory(session *entity.VoiceSession, u
 		Content: assistantMsg,
 	})
 	
-	// Keep only last 10 messages (5 minutes session = enough for short conversation)
+	
 	if len(history) > 10 {
 		history = history[len(history)-10:]
 	}
 	
 	session.Context["conversation_history"] = history
 	session.LastActivity = time.Now()
-} // ✅ ADD THIS CLOSING BRACE
+} 
+
+func (s *voiceService) handleDeleteTransactionIntent(
+	ctx context.Context,
+	userID string,
+	intent chatGPT.Intent,
+	session *entity.VoiceSession,
+) (*voice.VoiceResponse, error) {
+	requestID := contextPkg.GetRequestID(ctx)
+
+	amount, _ := intent.Data["amount"].(float64)
+	description, _ := intent.Data["description"].(string)
+
+	s.log.WithFields(logrus.Fields{
+		"request_id":  requestID,
+		"amount":      amount,
+		"description": description,
+	}).Info("Processing simplified delete transaction intent")
+
+	// Validasi minimal harus ada nominal
+	if amount == 0 {
+		return &voice.VoiceResponse{
+			Text:    "Maaf, mohon sebutkan nominal transaksi yang ingin dihapus.",
+			Action:  "clarify",
+			Success: false,
+		}, nil
+	}
+
+	// Ambil semua transaksi user
+	allTransactions, err := s.budgetService.GetTransactionsByUserID(ctx, userID)
+	if err != nil {
+		s.log.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"error":      err.Error(),
+		}).Error("Failed to get user transactions")
+		
+		return &voice.VoiceResponse{
+			Text:    "Maaf, terjadi kesalahan saat mengambil data transaksi.",
+			Action:  "error",
+			Success: false,
+		}, err
+	}
+
+	// Filter transaksi berdasarkan nominal dan deskripsi (jika ada)
+	matchedTransactions := s.filterTransactionsByNominalAndDesc(allTransactions, amount, description)
+
+	if len(matchedTransactions) == 0 {
+		responseText := fmt.Sprintf("Tidak ada transaksi dengan nominal Rp%.0f", amount)
+		if description != "" {
+			responseText += fmt.Sprintf(" dan deskripsi yang mengandung '%s'", description)
+		}
+		responseText += " yang ditemukan."
+
+		return &voice.VoiceResponse{
+			Text:    responseText,
+			Action:  "not_found",
+			Success: false,
+		}, nil
+	}
+
+	// LANGSUNG HAPUS SEMUA transaksi yang cocok
+	deletedCount := 0
+	failedCount := 0
+	var failedIDs []string
+	
+	for _, tx := range matchedTransactions {
+		s.log.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"tx_id":      tx.ID,
+			"nominal":    tx.Nominal,
+			"desc":       tx.Description,
+		}).Info("Deleting matched transaction")
+
+		if err := s.budgetService.DeleteTransaction(ctx, tx.ID, userID); err != nil {
+			s.log.WithFields(logrus.Fields{
+				"request_id": requestID,
+				"tx_id":      tx.ID,
+				"error":      err.Error(),
+			}).Error("Failed to delete transaction")
+			failedCount++
+			failedIDs = append(failedIDs, tx.ID)
+		} else {
+			deletedCount++
+		}
+	}
+
+	// Buat response berdasarkan hasil
+	var responseText string
+	if deletedCount > 0 {
+		if deletedCount == 1 {
+			responseText = fmt.Sprintf("Berhasil menghapus 1 transaksi dengan nominal Rp%.0f", amount)
+		} else {
+			responseText = fmt.Sprintf("Berhasil menghapus %d transaksi dengan nominal Rp%.0f", deletedCount, amount)
+		}
+		
+		if description != "" {
+			responseText += fmt.Sprintf(" yang mengandung '%s'", description)
+		}
+		responseText += "."
+		
+		if failedCount > 0 {
+			responseText += fmt.Sprintf(" Namun, %d transaksi gagal dihapus.", failedCount)
+		}
+	} else {
+		responseText = "Maaf, tidak ada transaksi yang berhasil dihapus. Silakan coba lagi."
+	}
+
+	return &voice.VoiceResponse{
+		Text:    responseText,
+		Action:  "delete_complete",
+		Success: deletedCount > 0,
+		Metadata: map[string]interface{}{
+			"deleted_count": deletedCount,
+			"failed_count":  failedCount,
+			"total_found":   len(matchedTransactions),
+			"failed_ids":    failedIDs,
+		},
+	}, nil
+}
+
+func (s *voiceService) handleLogoutIntent(
+	ctx context.Context,
+	intent chatGPT.Intent,
+	session *entity.VoiceSession,
+) (*voice.VoiceResponse, error) {
+	requestID := contextPkg.GetRequestID(ctx)
+
+	s.log.WithFields(logrus.Fields{
+		"request_id": requestID,
+		"action":     intent.Action,
+		"confidence": intent.Confidence,
+	}).Info("Processing logout intent")
+
+	
+	url, _ := intent.Data["url"].(string)
+	displayName, _ := intent.Data["display_name"].(string)
+
+	
+	session.PendingConfirmation = true
+	session.Context = map[string]interface{}{
+		"step":            "awaiting_logout_confirmation",
+		"logout_url":      url,
+		"logout_action":   true,
+	}
+
+	responseText := "Apakah Anda yakin ingin keluar dari aplikasi?"
+
+	return &voice.VoiceResponse{
+		Text:       responseText,
+		Action:     "confirm_logout",
+		Success:    false,
+		Confidence: intent.Confidence,
+		Metadata: map[string]interface{}{
+			"logout_url":      url,
+			"display_name":    displayName,
+		},
+		SessionState: &voice.SessionState{
+			PendingConfirmation: true,
+			Context:             session.Context,
+		},
+	}, nil
+}
+
+func (s *voiceService) filterTransactionsByNominalAndDesc(
+	transactions []entity.BudgetTransaction,
+	amount float64,
+	description string,
+) []entity.BudgetTransaction {
+	var matched []entity.BudgetTransaction
+
+	for _, tx := range transactions {
+		// Filter berdasarkan nominal (harus sama persis)
+		if tx.Nominal != amount {
+			continue
+		}
+
+		// Jika deskripsi disebutkan, filter juga berdasarkan deskripsi
+		// Menggunakan case-insensitive substring matching
+		if description != "" {
+			txDescLower := strings.ToLower(tx.Description)
+			searchDescLower := strings.ToLower(strings.TrimSpace(description))
+			
+			if !strings.Contains(txDescLower, searchDescLower) {
+				continue
+			}
+		}
+
+		// Transaksi cocok dengan kriteria
+		matched = append(matched, tx)
+	}
+
+	return matched
+}

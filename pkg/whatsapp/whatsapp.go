@@ -34,7 +34,7 @@ func New() (IWhatsappSender, error) {
 
 	dbLog := waLog.Stdout("Database", "INFO", true)
 
-	// Tambahkan context di sini
+	
 	ctx := context.Background()
 
 	container, err := sqlstore.New(ctx, "postgres", dsn, dbLog)
@@ -42,7 +42,7 @@ func New() (IWhatsappSender, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Tambahkan context di sini juga
+	
 	deviceStore, err := container.GetFirstDevice(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device store: %w", err)

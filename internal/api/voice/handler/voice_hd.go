@@ -28,20 +28,20 @@ func (h *VoiceHandler) ProcessChatCommand(ctx *fiber.Ctx) error {
 		"path":       ctx.Path(),
 	}).Debug("Processing chat voice command request (Tahap 2)")
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
 	}
 
-	// Get audio file
+	
 	audioFile, err := ctx.FormFile("audio")
 	if err != nil {
 		return errHandler.HandleValidationError(ctx, requestID,
 			errors.New("audio file is required"), ctx.Path())
 	}
 
-	// Get optional context
+	
 	var contextData map[string]interface{}
 
 	req := voice.ProcessVoiceRequest{
@@ -49,7 +49,7 @@ func (h *VoiceHandler) ProcessChatCommand(ctx *fiber.Ctx) error {
 		Context:   contextData,
 	}
 
-	// Process with GPT chat
+	
 	response, err := h.voiceService.ProcessChatCommand(c, userData.ID, req)
 	if err != nil {
 		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "process_chat_command")
@@ -75,30 +75,30 @@ func (h *VoiceHandler) ProcessVoiceCommand(ctx *fiber.Ctx) error {
 		"path":       ctx.Path(),
 	}).Debug("Processing voice command request")
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
 	}
 
-	// Get audio file
+	
 	audioFile, err := ctx.FormFile("audio")
 	if err != nil {
 		return errHandler.HandleValidationError(ctx, requestID,
 			errors.New("audio file is required"), ctx.Path())
 	}
 
-	// Get optional context
-	//contextStr := ctx.FormValue("context", "{}")
+	
+	
 	var contextData map[string]interface{}
-	// Parse context if provided (optional)
+	
 
 	req := voice.ProcessVoiceRequest{
 		AudioFile: audioFile,
 		Context:   contextData,
 	}
 
-	// Process voice command
+	
 	response, err := h.voiceService.ProcessVoiceCommand(c, userData.ID, req)
 	if err != nil {
 		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "process_voice_command")
@@ -124,20 +124,20 @@ func (h *VoiceHandler) ProcessConfirmation(ctx *fiber.Ctx) error {
 		"path":       ctx.Path(),
 	}).Debug("Processing voice confirmation request")
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
 	}
 
-	// Get audio file
+	
 	audioFile, err := ctx.FormFile("audio")
 	if err != nil {
 		return errHandler.HandleValidationError(ctx, requestID,
 			errors.New("audio file is required"), ctx.Path())
 	}
 
-	// Get required fields
+	
 	pendingPageID := ctx.FormValue("pending_page_id")
 	sessionID := ctx.FormValue("session_id")
 
@@ -152,12 +152,12 @@ func (h *VoiceHandler) ProcessConfirmation(ctx *fiber.Ctx) error {
 		SessionID:     sessionID,
 	}
 
-	// Validate request
+	
 	if err := h.validator.Struct(req); err != nil {
 		return errHandler.HandleValidationError(ctx, requestID, err, ctx.Path())
 	}
 
-	// Process confirmation
+	
 	response, err := h.voiceService.ProcessConfirmation(c, userData.ID, req)
 	if err != nil {
 		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "process_confirmation")
@@ -183,7 +183,7 @@ func (h *VoiceHandler) GetVoiceHistory(ctx *fiber.Ctx) error {
 		"path":       ctx.Path(),
 	}).Debug("Processing get voice history request")
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
@@ -229,7 +229,7 @@ func (h *VoiceHandler) GetVoiceAnalytics(ctx *fiber.Ctx) error {
 		"path":       ctx.Path(),
 	}).Debug("Processing get voice analytics request")
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
@@ -260,7 +260,7 @@ func (h *VoiceHandler) GetSmartSuggestions(ctx *fiber.Ctx) error {
 		"path":       ctx.Path(),
 	}).Debug("Processing get smart suggestions request")
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
@@ -429,13 +429,13 @@ func (h *VoiceHandler) ServeAudioFile(ctx *fiber.Ctx) error {
 			errors.New("filename is required"), ctx.Path())
 	}
 
-	// Security check
+	
 	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		return errHandler.HandleValidationError(ctx, requestID,
 			errors.New("invalid filename"), ctx.Path())
 	}
 
-	// Get audio data from S3
+	
 	audioData, err := h.voiceService.ServeAudioFile(c, filename)
 	if err != nil {
 		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "serve_audio_file")

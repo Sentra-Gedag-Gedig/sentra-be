@@ -41,11 +41,11 @@ func (h *DetectionHandler) handleKTPWebSocket(c *websocket.Conn) {
 		c.Close()
 	}()
 
-	// Set connection limits
+	
 	maxReadTimeout := 60 * time.Second
 	writeTimeout := 10 * time.Second
 	
-	// Set close handler untuk menangani berbagai kode penutupan
+	
 	c.SetCloseHandler(func(code int, text string) error {
 		switch code {
 		case websocket.CloseNormalClosure:
@@ -62,7 +62,7 @@ func (h *DetectionHandler) handleKTPWebSocket(c *websocket.Conn) {
 		return nil
 	})
 
-	// Set ping handler untuk menjaga koneksi tetap hidup
+	
 	c.SetPingHandler(func(data string) error {
 		h.log.Debug("Received ping from KTP client, sending pong")
 		pongDeadline := time.Now().Add(5 * time.Second)
@@ -73,13 +73,13 @@ func (h *DetectionHandler) handleKTPWebSocket(c *websocket.Conn) {
 		return nil
 	})
 
-	// Set pong handler untuk tracking heartbeat dari client
+	
 	c.SetPongHandler(func(data string) error {
 		h.log.Debug("Received pong from KTP client")
 		return nil
 	})
 
-	// Goroutine untuk mengirim ping secara berkala (heartbeat)
+	
 	pingTicker := time.NewTicker(30 * time.Second)
 	defer pingTicker.Stop()
 	
@@ -102,25 +102,25 @@ func (h *DetectionHandler) handleKTPWebSocket(c *websocket.Conn) {
 		}
 	}()
 
-	// Main message handling loop
+	
 	for {
-		// Set read deadline untuk mencegah hanging
+		
 		if err := c.SetReadDeadline(time.Now().Add(maxReadTimeout)); err != nil {
 			h.log.Errorf("Error setting read deadline for KTP WebSocket: %v", err)
 			break
 		}
 
-		// Read message dari client
+		
 		messageType, message, err := c.ReadMessage()
 		if err != nil {
-			// Handle berbagai jenis error penutupan koneksi
+			
 			if websocket.IsCloseError(err, 
 				websocket.CloseNormalClosure,
 				websocket.CloseGoingAway,
 				websocket.CloseNoStatusReceived,
 				websocket.CloseAbnormalClosure) {
 				
-				// Log dengan level yang sesuai
+				
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
 					h.log.Info("KTP WebSocket connection closed by client")
 				} else {
@@ -129,7 +129,7 @@ func (h *DetectionHandler) handleKTPWebSocket(c *websocket.Conn) {
 				break
 			}
 			
-			// Error lainnya (network, timeout, dll)
+			
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				h.log.Warn("KTP WebSocket read timeout - client may be inactive")
 			} else {
@@ -138,21 +138,21 @@ func (h *DetectionHandler) handleKTPWebSocket(c *websocket.Conn) {
 			break
 		}
 
-		// Reset read deadline setelah berhasil baca message
+		
 		if err := c.SetReadDeadline(time.Time{}); err != nil {
 			h.log.Errorf("Error resetting read deadline for KTP WebSocket: %v", err)
 		}
 
-		// Process hanya binary message
+		
 		if messageType == websocket.BinaryMessage {
 			h.log.Infof("Received KTP binary frame of size: %d bytes", len(message))
 
-			// Process frame menggunakan detection service
+			
 			result, err := h.detectionService.ProcessKTPFrame(message)
 			if err != nil {
 				h.log.Errorf("Error processing KTP frame: %v", err)
 				
-				// Send error response ke client
+				
 				errorResponse := map[string]interface{}{
 					"error": true,
 					"message": "Failed to process KTP frame",
@@ -166,7 +166,7 @@ func (h *DetectionHandler) handleKTPWebSocket(c *websocket.Conn) {
 				continue
 			}
 
-			// Send successful result ke client
+			
 			h.log.Infof("KTP frame processed successfully - Message: %s", result.Message)
 			
 			if err := h.writeJSONWithTimeout(c, result, writeTimeout); err != nil {
@@ -178,31 +178,31 @@ func (h *DetectionHandler) handleKTPWebSocket(c *websocket.Conn) {
 
 		} else if messageType == websocket.TextMessage {
 			h.log.Debugf("Received KTP text message: %s", string(message))
-			// Handle text messages jika diperlukan (misalnya commands)
+			
 			
 		} else {
 			h.log.Warnf("Received unexpected KTP message type: %d", messageType)
 		}
 	}
 	
-	// Cleanup
+	
 	done <- true
 	h.log.Debug("KTP WebSocket handler cleanup completed")
 }
 
-// Helper function untuk write JSON dengan timeout
+
 func (h *DetectionHandler) writeJSONWithTimeout(c *websocket.Conn, data interface{}, timeout time.Duration) error {
-	// Set write deadline
+	
 	if err := c.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
 		return fmt.Errorf("failed to set write deadline: %w", err)
 	}
 
-	// Write JSON
+	
 	if err := c.WriteJSON(data); err != nil {
 		return fmt.Errorf("failed to write JSON: %w", err)
 	}
 
-	// Reset write deadline
+	
 	if err := c.SetWriteDeadline(time.Time{}); err != nil {
 		return fmt.Errorf("failed to reset write deadline: %w", err)
 	}

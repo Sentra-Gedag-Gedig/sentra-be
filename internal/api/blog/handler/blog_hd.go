@@ -25,40 +25,40 @@ func (h *BlogsHandler) CreateBlog(ctx *fiber.Ctx) error {
 		"path":       ctx.Path(),
 	}).Debug("Processing create blog request")
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
 	}
 
-	// Get form values
+	
 	title := ctx.FormValue("title")
 	body := ctx.FormValue("body")
 	blogCategory := ctx.FormValue("blog_category")
 
-	// Validate required fields
+	
 	if title == "" || body == "" || blogCategory == "" {
 		return errHandler.HandleValidationError(ctx, requestID,
 			errors.New("title, body, and blog_category are required"), ctx.Path())
 	}
 
-	// Create request object
+	
 	req := blogs.CreateBlogRequest{
 		Title:        title,
 		Body:         body,
 		BlogCategory: blogCategory,
 	}
 
-	// Validate with validator
+	
 	if err := h.validator.Struct(req); err != nil {
 		return errHandler.HandleValidationError(ctx, requestID, err, ctx.Path())
 	}
 
-	// Get image file if provided
+	
 	imageFile, err := ctx.FormFile("image")
-	// Ignore error - image is optional
+	
 
-	// Create blog
+	
 	if err := h.blogsService.CreateBlog(c, req, userData.ID, imageFile); err != nil {
 		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "create_blog")
 	}
@@ -207,19 +207,19 @@ func (h *BlogsHandler) UpdateBlog(ctx *fiber.Ctx) error {
 			errors.New("blog ID is required"), ctx.Path())
 	}
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
 	}
 
-	// Get form values
+	
 	title := ctx.FormValue("title", "")
 	body := ctx.FormValue("body", "")
 	blogCategory := ctx.FormValue("blog_category", "")
 	imageURL := ctx.FormValue("image_url", "")
 
-	// Create request object with form values
+	
 	req := blogs.UpdateBlogRequest{
 		Title:        title,
 		Body:         body,
@@ -227,11 +227,11 @@ func (h *BlogsHandler) UpdateBlog(ctx *fiber.Ctx) error {
 		ImageURL:     imageURL,
 	}
 
-	// Get image file if provided
+	
 	imageFile, err := ctx.FormFile("image")
-	// Ignore error - image is optional
+	
 
-	// Update blog
+	
 	if err := h.blogsService.UpdateBlog(c, id, req, userData.ID, imageFile); err != nil {
 		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "update_blog")
 	}
@@ -264,13 +264,13 @@ func (h *BlogsHandler) DeleteBlog(ctx *fiber.Ctx) error {
 			errors.New("blog ID is required"), ctx.Path())
 	}
 
-	// Get authenticated user
+	
 	userData, err := jwtPkg.GetUserLoginData(ctx)
 	if err != nil {
 		return errHandler.HandleUnauthorized(ctx, requestID, "Unauthorized")
 	}
 
-	// Delete blog
+	
 	if err := h.blogsService.DeleteBlog(c, id, userData.ID); err != nil {
 		return errHandler.Handle(ctx, requestID, err, ctx.Path(), "delete_blog")
 	}

@@ -14,26 +14,26 @@ import (
 )
 
 type IVoiceService interface {
-	// Chat-based voice command (GPT-powered with navigation)
+	
 	ProcessChatCommand(ctx context.Context, userID string, req voice.ProcessVoiceRequest) (*voice.VoiceResponse, error)
 	
-	// Legacy command-based voice processing (NLP-based, strict format)
+	
 	ProcessVoiceCommand(ctx context.Context, userID string, req voice.ProcessVoiceRequest) (*voice.VoiceResponse, error)
 	ProcessConfirmation(ctx context.Context, userID string, req voice.ConfirmationRequest) (*voice.VoiceResponse, error)
 	
-	// History and analytics
+	
 	GetVoiceHistory(ctx context.Context, userID string, page, limit int) ([]voice.VoiceCommandHistory, int, error)
 	GetVoiceAnalytics(ctx context.Context, userID string) (*voice.VoiceAnalytics, error)
 	
-	// Smart suggestions
+	
 	GetSmartSuggestions(ctx context.Context, userID string) (*voice.SuggestionsResponse, error)
 	
-	// Page mappings management
+	
 	GetPageMappings(ctx context.Context) ([]voice.PageMapping, error)
 	CreatePageMapping(ctx context.Context, mapping voice.PageMapping) error
 	UpdatePageMapping(ctx context.Context, pageID string, mapping voice.PageMapping) error
 	
-	// Testing and utilities
+	
 	TestNLPProcessing(ctx context.Context, req voice.NLPTestRequest) (*voice.NLPTestResponse, error)
 	ServeAudioFile(ctx context.Context, filename string) ([]byte, error)
 }

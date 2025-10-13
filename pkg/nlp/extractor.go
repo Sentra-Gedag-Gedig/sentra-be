@@ -7,7 +7,7 @@ import (
 )
 
 type TransactionData struct {
-	Type        string  // "income" or "expense"
+	Type        string  
 	Amount      float64
 	Description string
 	Category    string
@@ -21,7 +21,7 @@ type NumberExtractor struct {
 func NewNumberExtractor() *NumberExtractor {
 	return &NumberExtractor{
 		numberWords: map[string]float64{
-			// Units
+			
 			"nol":       0,
 			"satu":      1,
 			"dua":       2,
@@ -38,7 +38,7 @@ func NewNumberExtractor() *NumberExtractor {
 			"seribu":    1000,
 			"sejuta":    1000000,
 			
-			// Tens
+			
 			"puluh":     10,
 			"belas":     10,
 			"ratus":     100,
@@ -46,7 +46,7 @@ func NewNumberExtractor() *NumberExtractor {
 			"juta":      1000000,
 			"miliar":    1000000000,
 			
-			// Common shortcuts
+			
 			"rebu":      1000,
 			"rebuan":    1000,
 		},
@@ -56,10 +56,10 @@ func NewNumberExtractor() *NumberExtractor {
 func (ne *NumberExtractor) ExtractAmount(text string) (float64, string) {
 	text = strings.ToLower(text)
 	
-	// Pattern 1: Numeric with separator (50.000, 1.000.000)
+	
 	numPattern := regexp.MustCompile(`(\d{1,3}(?:\.\d{3})*(?:,\d+)?)`)
 	if matches := numPattern.FindString(text); matches != "" {
-		// Remove dots (thousand separator) and replace comma with dot
+		
 		cleaned := strings.ReplaceAll(matches, ".", "")
 		cleaned = strings.ReplaceAll(cleaned, ",", ".")
 		if amount, err := strconv.ParseFloat(cleaned, 64); err == nil {
@@ -67,7 +67,7 @@ func (ne *NumberExtractor) ExtractAmount(text string) (float64, string) {
 		}
 	}
 	
-	// Pattern 2: Number + unit (50 ribu, 1 juta)
+	
 	unitPattern := regexp.MustCompile(`(\d+)\s*(ribu|rebu|juta|jt|rb|k)`)
 	if matches := unitPattern.FindStringSubmatch(text); len(matches) > 0 {
 		num, _ := strconv.ParseFloat(matches[1], 64)
@@ -84,7 +84,7 @@ func (ne *NumberExtractor) ExtractAmount(text string) (float64, string) {
 		return num * multiplier, "unit"
 	}
 	
-	// Pattern 3: Indonesian number words
+	
 	amount := ne.parseIndonesianNumber(text)
 	if amount > 0 {
 		return amount, "words"
@@ -153,7 +153,7 @@ func (ne *NumberExtractor) ExtractTransactionType(text string) string {
 func (ne *NumberExtractor) ExtractDescription(text string, amount float64) string {
 	text = strings.ToLower(text)
 	
-	// Remove transaction type keywords
+	
 	removeKeywords := []string{
 		"tambah", "catat", "buat", "bikin",
 		"pemasukan", "pengeluaran", "transaksi",
@@ -164,11 +164,11 @@ func (ne *NumberExtractor) ExtractDescription(text string, amount float64) strin
 		text = strings.ReplaceAll(text, keyword, "")
 	}
 	
-	// Remove amount-related words
+	
 	amountPattern := regexp.MustCompile(`\d+\s*(ribu|rebu|juta|rb|jt|k)?`)
 	text = amountPattern.ReplaceAllString(text, "")
 	
-	// Clean up
+	
 	text = strings.TrimSpace(text)
 	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
 	
@@ -198,7 +198,7 @@ func (ne *NumberExtractor) IdentifyCategory(description string, transactionType 
 			}
 		}
 		
-		return "gaji" // default for income
+		return "gaji" 
 	}
 	
 	if transactionType == "expense" {
@@ -218,32 +218,32 @@ func (ne *NumberExtractor) IdentifyCategory(description string, transactionType 
 			}
 		}
 		
-		return "sehari-hari" // default for expense
+		return "sehari-hari" 
 	}
 	
 	return ""
 }
 
 func (ne *NumberExtractor) ExtractTransaction(text string) (*TransactionData, error) {
-	// Extract amount
+	
 	amount, amountType := ne.ExtractAmount(text)
 	if amount == 0 {
 		return nil, nil
 	}
 	
-	// Extract transaction type
+	
 	txType := ne.ExtractTransactionType(text)
 	if txType == "unknown" {
 		return nil, nil
 	}
 	
-	// Extract description
+	
 	description := ne.ExtractDescription(text, amount)
 	
-	// Identify category
+	
 	category := ne.IdentifyCategory(description, txType)
 	
-	// Calculate confidence
+	
 	confidence := 0.7
 	if amountType == "numeric" {
 		confidence = 0.9

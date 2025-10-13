@@ -1,4 +1,4 @@
-// voice/repository/session_rs.go
+
 package voiceRepository
 
 import (
@@ -61,7 +61,7 @@ func (r *sessionRepository) GetSessionByUserID(ctx context.Context, userID strin
 	requestID := contextPkg.GetRequestID(ctx)
 	var sessionDB VoiceSessionDB
 
-	cutoffTime := time.Now().Add(-24 * time.Hour) // Sessions expire after 24 hours
+	cutoffTime := time.Now().Add(-24 * time.Hour) 
 
 	argsKV := map[string]interface{}{
 		"user_id":     userID,
@@ -97,17 +97,27 @@ func (r *sessionRepository) GetSessionByUserID(ctx context.Context, userID strin
 	return r.makeVoiceSession(sessionDB), nil
 }
 
+
+
 func (r *sessionRepository) UpdateSession(ctx context.Context, session entity.VoiceSession) error {
 	requestID := contextPkg.GetRequestID(ctx)
+	
 	
 	contextJSON, err := json.Marshal(session.Context)
 	if err != nil {
 		r.log.WithFields(logrus.Fields{
 			"request_id": requestID,
 			"error":      err.Error(),
+			"context":    session.Context, 
 		}).Error("Failed to marshal session context")
 		return err
 	}
+
+	
+	r.log.WithFields(logrus.Fields{
+		"request_id": requestID,
+		"context_json": string(contextJSON),
+	}).Debug("Session context JSON")
 
 	argsKV := map[string]interface{}{
 		"id":                   session.ID,

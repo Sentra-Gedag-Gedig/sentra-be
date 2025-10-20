@@ -42,7 +42,7 @@ func (h *ErrorHandler) Handle(c *fiber.Ctx, requestID string, err error, path st
 		return c.Status(respErr.Code).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Auth domain errors
+	
 	if errors.Is(err, auth.ErrPhoneNumberAlreadyExists) {
 		h.logger.WithFields(log.Fields{
 			"request_id": requestID,
@@ -182,7 +182,7 @@ func (h *ErrorHandler) Handle(c *fiber.Ctx, requestID string, err error, path st
 		})
 	}
 
-	// Budget manager domain errors
+	
 	if errors.Is(err, budget_manager.ErrTransactionNotFound) {
 		h.logger.WithFields(log.Fields{
 			"request_id": requestID,
@@ -255,7 +255,7 @@ func (h *ErrorHandler) Handle(c *fiber.Ctx, requestID string, err error, path st
 		})
 	}
 
-	// SentraPay domain errors
+	
 	if errors.Is(err, sentrapay.ErrInvalidBank) {
 		h.logger.WithFields(log.Fields{
 			"request_id": requestID,
@@ -316,7 +316,7 @@ func (h *ErrorHandler) Handle(c *fiber.Ctx, requestID string, err error, path st
 		})
 	}
 
-	// Detection domain errors
+	
 	if errors.Is(err, detection.ErrInternalServerError) {
 		h.logger.WithFields(log.Fields{
 			"request_id": requestID,

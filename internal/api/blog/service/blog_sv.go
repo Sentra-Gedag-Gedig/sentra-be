@@ -26,7 +26,7 @@ func (s *blogsService) CreateBlog(ctx context.Context, req blogs.CreateBlogReque
 	}
 	defer repo.Rollback()
 
-	// Verify if category exists
+	
 	_, err = repo.Categories.GetCategoryByID(ctx, req.BlogCategory)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -39,7 +39,7 @@ func (s *blogsService) CreateBlog(ctx context.Context, req blogs.CreateBlogReque
 
 	var imageURL string
 	if imageFile != nil {
-		// Validate image file
+		
 		if err := s.validateImageFile(imageFile); err != nil {
 			s.log.WithFields(logrus.Fields{
 				"request_id": requestID,
@@ -48,7 +48,7 @@ func (s *blogsService) CreateBlog(ctx context.Context, req blogs.CreateBlogReque
 			return err
 		}
 
-		// Upload image to S3
+		
 		uploadedURL, err := s.s3Client.UploadFile(imageFile)
 		if err != nil {
 			s.log.WithFields(logrus.Fields{
@@ -131,7 +131,7 @@ func (s *blogsService) GetBlogByID(ctx context.Context, id string) (entity.Blog,
 		return entity.Blog{}, err
 	}
 
-	// Create presigned URL for image if it exists
+	
 	if blog.ImageURL != "" {
 		presignedURL, err := s.s3Client.PresignUrl(blog.ImageURL)
 		if err != nil {
@@ -141,7 +141,7 @@ func (s *blogsService) GetBlogByID(ctx context.Context, id string) (entity.Blog,
 				"image_url":  blog.ImageURL,
 				"error":      err.Error(),
 			}).Warn("Failed to create presigned URL for image")
-			// Continue without presigned URL
+			
 		} else {
 			blog.ImageURL = presignedURL
 		}
@@ -188,7 +188,7 @@ func (s *blogsService) GetAllBlogs(ctx context.Context, page, limit int) (*blogs
 	}
 
 	for _, blog := range blogsList {
-		// Create presigned URL for image if it exists
+		
 		imageURL := blog.ImageURL
 		if imageURL != "" {
 			presignedURL, err := s.s3Client.PresignUrl(imageURL)
@@ -199,7 +199,7 @@ func (s *blogsService) GetAllBlogs(ctx context.Context, page, limit int) (*blogs
 					"image_url":  imageURL,
 					"error":      err.Error(),
 				}).Warn("Failed to create presigned URL for image")
-				// Continue with original URL
+				
 			} else {
 				imageURL = presignedURL
 			}
@@ -232,7 +232,7 @@ func (s *blogsService) GetBlogsByCategory(ctx context.Context, category string, 
 		return nil, err
 	}
 
-	// Verify if category exists
+	
 	_, err = repo.Categories.GetCategoryByID(ctx, category)
 	if err != nil {
 		s.log.WithFields(logrus.Fields{
@@ -270,7 +270,7 @@ func (s *blogsService) GetBlogsByCategory(ctx context.Context, category string, 
 	}
 
 	for _, blog := range blogsList {
-		// Create presigned URL for image if it exists
+		
 		imageURL := blog.ImageURL
 		if imageURL != "" {
 			presignedURL, err := s.s3Client.PresignUrl(imageURL)
@@ -281,7 +281,7 @@ func (s *blogsService) GetBlogsByCategory(ctx context.Context, category string, 
 					"image_url":  imageURL,
 					"error":      err.Error(),
 				}).Warn("Failed to create presigned URL for image")
-				// Continue with original URL
+				
 			} else {
 				imageURL = presignedURL
 			}
@@ -315,7 +315,7 @@ func (s *blogsService) UpdateBlog(ctx context.Context, id string, req blogs.Upda
 	}
 	defer repo.Rollback()
 
-	// Get existing blog
+	
 	existingBlog, err := repo.Blogs.GetBlogByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, blogs.ErrBlogNotFound) {
@@ -333,7 +333,7 @@ func (s *blogsService) UpdateBlog(ctx context.Context, id string, req blogs.Upda
 		return err
 	}
 
-	// Check if user is the author
+	
 	if existingBlog.Author != userID {
 		s.log.WithFields(logrus.Fields{
 			"request_id":   requestID,
@@ -344,7 +344,7 @@ func (s *blogsService) UpdateBlog(ctx context.Context, id string, req blogs.Upda
 		return blogs.ErrBlogNotOwned
 	}
 
-	// Check if category exists if provided
+	
 	if req.BlogCategory != "" && req.BlogCategory != existingBlog.BlogCategory {
 		_, err = repo.Categories.GetCategoryByID(ctx, req.BlogCategory)
 		if err != nil {
@@ -359,9 +359,9 @@ func (s *blogsService) UpdateBlog(ctx context.Context, id string, req blogs.Upda
 
 	imageURL := existingBlog.ImageURL
 
-	// Handle image upload if provided
+	
 	if imageFile != nil {
-		// Validate image file
+		
 		if err := s.validateImageFile(imageFile); err != nil {
 			s.log.WithFields(logrus.Fields{
 				"request_id": requestID,
@@ -370,7 +370,7 @@ func (s *blogsService) UpdateBlog(ctx context.Context, id string, req blogs.Upda
 			return err
 		}
 
-		// Upload new image to S3
+		
 		uploadedURL, err := s.s3Client.UploadFile(imageFile)
 		if err != nil {
 			s.log.WithFields(logrus.Fields{
@@ -380,7 +380,7 @@ func (s *blogsService) UpdateBlog(ctx context.Context, id string, req blogs.Upda
 			return blogs.ErrFailedToUpload
 		}
 
-		// If there's an existing image, delete it
+		
 		if existingBlog.ImageURL != "" {
 			parts := strings.Split(existingBlog.ImageURL, "/")
 			if len(parts) > 0 {
@@ -399,9 +399,9 @@ func (s *blogsService) UpdateBlog(ctx context.Context, id string, req blogs.Upda
 
 		imageURL = uploadedURL
 	} else if req.ImageURL != "" {
-		// If image URL is explicitly provided (for clearing image)
+		
 		if req.ImageURL == "remove" && existingBlog.ImageURL != "" {
-			// Delete existing image
+			
 			parts := strings.Split(existingBlog.ImageURL, "/")
 			if len(parts) > 0 {
 				fileName := parts[len(parts)-1]
@@ -417,7 +417,7 @@ func (s *blogsService) UpdateBlog(ctx context.Context, id string, req blogs.Upda
 		}
 	}
 
-	// Update blog fields
+	
 	blog := entity.Blog{
 		ID:           id,
 		Title:        req.Title,
@@ -460,7 +460,7 @@ func (s *blogsService) DeleteBlog(ctx context.Context, id string, userID string)
 	}
 	defer repo.Rollback()
 
-	// Get existing blog
+	
 	existingBlog, err := repo.Blogs.GetBlogByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, blogs.ErrBlogNotFound) {
@@ -478,7 +478,7 @@ func (s *blogsService) DeleteBlog(ctx context.Context, id string, userID string)
 		return err
 	}
 
-	// Check if user is the author
+	
 	if existingBlog.Author != userID {
 		s.log.WithFields(logrus.Fields{
 			"request_id":   requestID,
@@ -489,7 +489,7 @@ func (s *blogsService) DeleteBlog(ctx context.Context, id string, userID string)
 		return blogs.ErrBlogNotOwned
 	}
 
-	// Delete the blog
+	
 	if err := repo.Blogs.DeleteBlog(ctx, id); err != nil {
 		s.log.WithFields(logrus.Fields{
 			"request_id": requestID,
@@ -499,7 +499,7 @@ func (s *blogsService) DeleteBlog(ctx context.Context, id string, userID string)
 		return blogs.ErrDeleteBlog
 	}
 
-	// Delete the image if it exists
+	
 	if existingBlog.ImageURL != "" {
 		parts := strings.Split(existingBlog.ImageURL, "/")
 		if len(parts) > 0 {
@@ -510,7 +510,7 @@ func (s *blogsService) DeleteBlog(ctx context.Context, id string, userID string)
 					"file_name":  fileName,
 					"error":      err.Error(),
 				}).Warn("Failed to delete image")
-				// Continue with deletion
+				
 			}
 		}
 	}
@@ -567,13 +567,13 @@ func (s *blogsService) validateImageFile(file *multipart.FileHeader) error {
 		return nil
 	}
 
-	// Max file size: 5MB
+	
 	maxSize := int64(5 * 1024 * 1024)
 	if file.Size > maxSize {
 		return blogs.ErrFileTooLarge
 	}
 
-	// Check file extension
+	
 	ext := filepath.Ext(file.Filename)
 	ext = strings.ToLower(ext)
 	allowedExtensions := map[string]bool{
@@ -588,7 +588,7 @@ func (s *blogsService) validateImageFile(file *multipart.FileHeader) error {
 		return blogs.ErrInvalidFileType
 	}
 
-	// Check content type
+	
 	contentType := file.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "image/") {
 		return blogs.ErrInvalidFileType

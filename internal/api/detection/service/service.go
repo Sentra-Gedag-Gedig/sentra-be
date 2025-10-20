@@ -12,8 +12,8 @@ type IDetectionService interface {
 	ProcessFrame(frame []byte) (*entity.DetectionResult, error)
 	ProcessKTPFrame(frame []byte) (*entity.KTPDetectionResult, error)
 	ProcessQRISFrame(frame []byte) (*entity.QRISDetectionResult, error)
-	ExtractAndSaveKTP(ctx context.Context, base64Image string) (*detection.KTP, error)
-	DetectMoney(ctx context.Context, base64Image string) (*detection.MoneyDetectionResponse, error)
+	ExtractAndSaveKTP(ctx context.Context, imageData interface{}) (*detection.KTP, error)
+	DetectMoney(ctx context.Context, imageData interface{}) (*detection.MoneyDetectionResponse, error) 
 }
 
 type detectionService struct {

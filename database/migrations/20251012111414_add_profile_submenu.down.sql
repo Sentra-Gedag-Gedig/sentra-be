@@ -1,0 +1,1 @@
+DELETE FROM page_mappings WHERE page_id IN ('contact-person', 'logout');

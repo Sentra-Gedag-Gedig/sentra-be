@@ -16,11 +16,16 @@ import (
 	sentrapayHandler "ProjectGolang/internal/api/sentra_pay/handler"
 	sentrapayRepository "ProjectGolang/internal/api/sentra_pay/repository"
 	sentrapayService "ProjectGolang/internal/api/sentra_pay/service"
+	voiceHandler "ProjectGolang/internal/api/voice/handler"
+	voiceRepository "ProjectGolang/internal/api/voice/repository"
+	voiceService "ProjectGolang/internal/api/voice/service"
 	"ProjectGolang/internal/middleware"
 	"ProjectGolang/pkg/bcrypt"
 	"ProjectGolang/pkg/doku"
 	"ProjectGolang/pkg/gemini"
 	"ProjectGolang/pkg/google"
+	"ProjectGolang/pkg/nlp"
+	chatGPT "ProjectGolang/pkg/openai"
 	"ProjectGolang/pkg/redis"
 	"ProjectGolang/pkg/s3"
 	"ProjectGolang/pkg/smtp"
@@ -28,12 +33,13 @@ import (
 	websocketPkg "ProjectGolang/pkg/websocket"
 	"ProjectGolang/pkg/whatsapp"
 	"fmt"
+	"os"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
-	"os"
 )
 
 type ServerOption func(*Server) error
@@ -236,15 +242,44 @@ func (s *Server) RegisterHandler() {
 	blogServices := blogService.NewBlogsService(s.log, blogRepo, s.s3Client, s.utils)
 	blogHandlers := blogHandler.New(s.log, s.validator, s.middleware, blogServices)
 
+	nlpProcessor := nlp.NewProcessor(nil)
+	chatGPTClient := chatGPT.NewChatGPT()
+	
+	voiceRepo := voiceRepository.New(s.db, s.log)
+	
+	voiceConfig := &voiceService.VoiceConfig{
+		ElevenLabsAPIKey:  os.Getenv("ELEVENLABS_API_KEY"),
+		ElevenLabsVoiceID: os.Getenv("ELEVENLABS_VOICE_ID"),
+		OpenAIAPIKey:      os.Getenv("OPENAI_API_KEY"),
+		MaxFileSize:       5 * 1024 * 1024, // 5MB
+		AllowedFormats:    []string{".mp3", ".wav", ".m4a", ".ogg"},
+		SessionTimeout:    24, // 24 hours
+		RateLimitPerHour:  100,
+		EnableAnalytics:   true,
+		AudioCacheTimeout: 60, // 60 minutes
+	}
+
+	voiceServices := voiceService.NewVoiceService(
+		s.log,
+		voiceRepo,
+		s.s3Client,
+		s.utils,
+		nlpProcessor,
+		voiceConfig,
+		budgetServices, 
+		chatGPTClient,
+	)
+	voiceHandler := voiceHandler.New(s.log, s.validator, s.middleware, voiceServices)
+
 	s.setupHealthCheck()
-	s.handlers = append(s.handlers, authHandlers, detectionHandlers, budgetHandlers, dokuHandlers, blogHandlers)
+	s.handlers = append(s.handlers, authHandlers, detectionHandlers, budgetHandlers, dokuHandlers, blogHandlers, voiceHandler)
 }
 
 func (s *Server) Run() error {
 	router := s.engine.Group("/api/v1")
 
 	corsMiddleware := cors.New(cors.Config{
-		AllowOrigins:     "https://sentra-web-pi.vercel.app, http://localhost:3000",
+		AllowOrigins:     "https://sentra-web-pi.vercel.app, http://localhost:3000, https://sentra-web-e8ma.vercel.app",
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Request-ID",
 		ExposeHeaders:    "X-Request-ID",

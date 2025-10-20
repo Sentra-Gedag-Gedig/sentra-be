@@ -1,14 +1,16 @@
 package s3
 
 import (
+	"bytes"
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"mime/multipart"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -17,6 +19,7 @@ import (
 
 type ItfS3 interface {
 	UploadFile(file *multipart.FileHeader) (string, error)
+	UploadFileFromBytes(filename string, data []byte) (string, error)  
 	PresignUrl(fileName string) (string, error)
 	DeleteFile(fileName string) error
 }
@@ -144,3 +147,29 @@ func generateUniqueFileName(fileName string) (string, error) {
 	uniqueFileName := fmt.Sprintf("%s-%s", strings.ReplaceAll(time.Now().String(), " ", ""), fileName)
 	return uniqueFileName, nil
 }
+
+
+func (s *s3Client) UploadFileFromBytes(filename string, data []byte) (string, error) {
+	uploader := s3manager.NewUploader(s.session)
+
+	uniqueFileName, err := generateUniqueFileName(filename)
+	if err != nil {
+		return "", err
+	}
+
+	
+	uploadOutput, err := uploader.Upload(&s3manager.UploadInput{
+		Bucket:      aws.String(s.bucketName),
+		Key:         aws.String(uniqueFileName),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String("audio/mpeg"),
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return uploadOutput.Location, nil
+}
+
+

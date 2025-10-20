@@ -1,3 +1,4 @@
+
 package entity
 
 import (
@@ -19,6 +20,7 @@ const (
 	IncomeCategoryBonus      IncomeCategory = "bonus"
 	IncomeCategoryInvestment IncomeCategory = "investasi"
 	IncomeCategoryPartTime   IncomeCategory = "part time"
+	IncomeCategoryOther      IncomeCategory = "lainnya" 
 )
 
 type ExpenseCategory string
@@ -40,11 +42,12 @@ const (
 	ExpenseCategoryInvestment     ExpenseCategory = "investasi"
 	ExpenseCategoryPet            ExpenseCategory = "peliharaan"
 	ExpenseCategoryVacation       ExpenseCategory = "liburan"
+	ExpenseCategoryOther          ExpenseCategory = "lainnya" 
 )
 
 func IsValidIncomeCategory(category string) bool {
 	switch IncomeCategory(category) {
-	case IncomeCategorySalary, IncomeCategoryBonus, IncomeCategoryInvestment, IncomeCategoryPartTime:
+	case IncomeCategorySalary, IncomeCategoryBonus, IncomeCategoryInvestment, IncomeCategoryPartTime, IncomeCategoryOther: 
 		return true
 	default:
 		return false
@@ -56,7 +59,8 @@ func IsValidExpenseCategory(category string) bool {
 	case ExpenseCategoryFood, ExpenseCategoryDaily, ExpenseCategoryTransportation, ExpenseCategorySocial,
 		ExpenseCategoryHousing, ExpenseCategoryGift, ExpenseCategoryCommunication, ExpenseCategoryClothing,
 		ExpenseCategoryEntertainment, ExpenseCategoryAppearance, ExpenseCategoryHealth, ExpenseCategoryTax,
-		ExpenseCategoryEducation, ExpenseCategoryInvestment, ExpenseCategoryPet, ExpenseCategoryVacation:
+		ExpenseCategoryEducation, ExpenseCategoryInvestment, ExpenseCategoryPet, ExpenseCategoryVacation,
+		ExpenseCategoryOther: 
 		return true
 	default:
 		return false

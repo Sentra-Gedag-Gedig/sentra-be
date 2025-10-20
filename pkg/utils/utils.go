@@ -1,9 +1,13 @@
 package utils
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"mime/multipart"
 	"strings"
@@ -16,6 +20,7 @@ type IUtils interface {
 	NewULIDFromTimestamp(t time.Time) (string, error)
 	ValidateImageFile(file *multipart.FileHeader) error
 	ConvertFileToBase64(file multipart.File) (string, error)
+	OptimizeImageForOCR(imageData []byte, maxWidth, maxHeight int, quality int) ([]byte, error)
 }
 
 type utils struct {
@@ -65,4 +70,56 @@ func (u *utils) ConvertFileToBase64(file multipart.File) (string, error) {
 
 	base64Encoded := base64.StdEncoding.EncodeToString(fileBytes)
 	return base64Encoded, nil
+}
+
+func (u *utils) OptimizeImageForOCR(imageData []byte, maxWidth, maxHeight int, quality int) ([]byte, error) {
+	
+	img, format, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		return nil, err
+	}
+
+	
+	bounds := img.Bounds()
+	origWidth := bounds.Dx()
+	origHeight := bounds.Dy()
+
+	
+	newWidth, newHeight := origWidth, origHeight
+	if origWidth > maxWidth || origHeight > maxHeight {
+		ratio := float64(origWidth) / float64(origHeight)
+		
+		if origWidth > origHeight {
+			newWidth = maxWidth
+			newHeight = int(float64(maxWidth) / ratio)
+		} else {
+			newHeight = maxHeight
+			newWidth = int(float64(maxHeight) * ratio)
+		}
+	}
+
+	
+	if newWidth != origWidth || newHeight != origHeight {
+		
+		
+		
+	}
+
+	
+	var buf bytes.Buffer
+	switch format {
+	case "jpeg":
+		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality})
+	case "png":
+		err = png.Encode(&buf, img)
+	default:
+		
+		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality})
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

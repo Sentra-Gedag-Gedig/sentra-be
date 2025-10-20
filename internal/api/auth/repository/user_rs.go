@@ -262,7 +262,7 @@ func (r *userRepository) DeleteUser(ctx context.Context, id string) error {
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (entity.User, error) {
 	requestID := contextPkg.GetRequestID(ctx)
-	var user entity.User
+	var user UserDB  
 
 	argsKV := map[string]interface{}{
 		"email": email,
@@ -298,7 +298,8 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (entity.U
 		return entity.User{}, err
 	}
 
-	return user, nil
+	userRes := r.makeUser(user)  
+	return userRes, nil
 }
 
 func (r *userRepository) UpdateUserPassword(ctx context.Context, phoneNum string, password string) error {
@@ -537,6 +538,7 @@ func (r *userRepository) makeUser(user UserDB) entity.User {
 		EnableTouchID:                user.EnableTouchID,
 		HashTouchID:                  user.HashTouchID.String,
 		ProfilePhotoURL:              user.ProfilePhotoURL.String,
+		FacePhotoURL:                 user.FacePhotoURL.String,  
 		IsVerified:                   user.IsVerified,
 		CreatedAt:                    createdAt,
 		UpdatedAt:                    updatedAt,

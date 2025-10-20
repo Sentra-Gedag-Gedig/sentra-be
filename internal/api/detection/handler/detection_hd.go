@@ -352,7 +352,7 @@ func (h *DetectionHandler) ExtractKTP(ctx *fiber.Ctx) error {
 
 func (h *DetectionHandler) DetectMoney(ctx *fiber.Ctx) error {
 	requestID := h.middleware.GetRequestID(ctx)
-	c, cancel := context.WithTimeout(contextPkg.FromFiberCtx(ctx), 10*time.Second)
+	c, cancel := context.WithTimeout(contextPkg.FromFiberCtx(ctx), 30*time.Second)
 	defer cancel()
 
 	errHandler := handlerUtil.New(h.log)
